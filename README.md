@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="icon/AppIcon-1024.png" alt="Lidless" width="128" height="128" />
+<img src="icon/logo.png" alt="Lidless" width="148" />
 
 # Lidless
 
