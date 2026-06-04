@@ -1,0 +1,13 @@
+# build output
+Lidless.app/
+build/
+*.zip
+
+# generated iconset (AppIcon.icns + AppIcon-1024.png are committed)
+icon/AppIcon.iconset/
+
+# macOS
+.DS_Store
+
+# any built app bundle
+*.app/
