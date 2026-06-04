@@ -108,6 +108,14 @@ No background helper hangs around. No invisible privileged daemon. What you see 
 
 It just *opens*. Lidless is **notarized by Apple** under a Developer ID, so there's no "unidentified developer" wall, no right-click-then-Open dance, no Gatekeeper detour. It ships as a **universal binary** — native on Apple Silicon and Intel — and needs **macOS 13 (Ventura) or newer**. The first time you toggle it on, macOS asks for your admin password once; approve it and you're set.
 
+### Homebrew
+
+```sh
+brew install --cask sshykvlv/tap/lidless
+```
+
+Same notarized build, managed by Homebrew. To remove it later: `brew uninstall --cask lidless` (add `--zap` to also clear preferences and any `pmset` grant).
+
 ### Build from source *(adds the passwordless grant)*
 
 ```sh
