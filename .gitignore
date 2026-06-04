@@ -11,3 +11,13 @@ icon/AppIcon.iconset/
 
 # any built app bundle
 *.app/
+
+# secrets / credentials — never commit (defensive; project uses none today)
+.env
+.env.*
+*.p8
+*.p12
+*.pem
+*.cer
+*.mobileprovision
+*.key

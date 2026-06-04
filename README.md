@@ -92,7 +92,7 @@ That's the entire mechanism. No fake keystrokes, no background daemon pretending
 Changing that setting needs admin rights, so you get two honest paths:
 
 1. **Zero setup.** The first time you toggle, macOS shows its standard admin-password dialog. Authenticate and you're done. Nothing is installed behind your back.
-2. **One-time passwordless grant.** Prefer never to see the dialog again? Building with `install.sh` adds a narrow `sudoers` rule scoped to *exactly* `/usr/bin/pmset` and nothing else, so toggling is silent from then on.
+2. **One-time passwordless grant.** Prefer never to see the dialog again? Building with `install.sh` adds a narrow `sudoers` rule scoped to *exactly* the two `pmset -a disablesleep` on/off commands the app issues — and nothing else — so toggling is silent from then on.
 
 No background helper hangs around. No invisible privileged daemon. What you see is what runs.
 

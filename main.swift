@@ -1,12 +1,16 @@
 import Cocoa
 import ServiceManagement
 import IOKit.ps
+import CryptoKit
 
-// Пути фиксированные — sudoers разрешает ровно /usr/bin/pmset
+// Пути фиксированные — sudoers разрешает ровно `pmset -a disablesleep 0|1`
 let pmsetPath = "/usr/bin/pmset"
 let sudoPath = "/usr/bin/sudo"
 let donateURL = "https://buy.stripe.com/5kQ14ogr4dq9fky4Mm0Jq02"   // Stripe Payment Link (pay-what-you-want, NORM)
 let repoURL = "https://github.com/sshykvlv/lidless"
+// Auto-update принимает ТОЛЬКО бинарь, подписанный этим Developer ID Team ID.
+let expectedTeamID = "J2Q78NFXZX"
+let expectedAssetName = "Lidless.zip"
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
@@ -17,7 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let batteryParent = NSMenuItem(title: "Battery cutoff", action: nil, keyEquivalent: "")
     private let loginItem   = NSMenuItem(title: "Launch at Login", action: #selector(toggleLogin), keyEquivalent: "")
     private let updatesItem = NSMenuItem(title: "Check for Updates…", action: #selector(updatesClicked), keyEquivalent: "")
-    private var pendingUpdate: (version: String, url: URL)?
+    private var pendingUpdate: (version: String, zip: URL, sums: URL?)?
 
     // Единственное подменю — отсечка по батарее (жёсткий минимализм).
     private let floorOptions: [(String, Int)] = [("Off", 0), ("10%", 10), ("20%", 20), ("30%", 30)]
@@ -130,6 +134,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let value = on ? "1" : "0"
         _ = run(sudoPath, ["-n", pmsetPath, "-a", "disablesleep", value])
         if isKeepAwakeOn() != on {
+            // ВНИМАНИЕ: строка ниже собирает shell-команду интерполяцией и выполняется
+            // `with administrator privileges` (root). Безопасно ТОЛЬКО потому, что обе
+            // подстановки — константы (pmsetPath фиксирован, value ∈ {"0","1"}).
+            // Никогда не делай pmsetPath или value динамическими/вводимыми пользователем —
+            // иначе это превращается в root-инъекцию команды.
             let script = "do shell script \"\(pmsetPath) -a disablesleep \(value)\" with administrator privileges"
             _ = run("/usr/bin/osascript", ["-e", script])
         }
@@ -208,14 +217,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             let latest = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
             let assets = json["assets"] as? [[String: Any]] ?? []
-            let zip = assets.compactMap { a -> String? in
-                ((a["name"] as? String)?.hasSuffix(".zip") == true) ? a["browser_download_url"] as? String : nil
-            }.first
+            func assetURL(_ match: (String) -> Bool) -> URL? {
+                for a in assets {
+                    if let name = a["name"] as? String, match(name),
+                       let s = a["browser_download_url"] as? String, let u = URL(string: s) { return u }
+                }
+                return nil
+            }
+            // Пин на точное имя ассета; фолбэк на первый .zip — подпись всё равно проверяется при установке.
+            let zip = assetURL { $0 == expectedAssetName } ?? assetURL { $0.hasSuffix(".zip") }
+            let sums = assetURL { $0 == "SHA256SUMS" }
             DispatchQueue.main.async {
-                if self.isNewer(latest, than: self.version), let z = zip, let u = URL(string: z) {
-                    self.pendingUpdate = (latest, u)
+                if self.isNewer(latest, than: self.version), let z = zip {
+                    self.pendingUpdate = (latest, z, sums)
                     self.updatesItem.attributedTitle = self.updatesAttr("↓ Update available", ver: latest)
-                    if announce { self.downloadUpdate((latest, u)) }
+                    if announce { self.downloadUpdate((latest, z, sums)) }
                 } else {
                     self.pendingUpdate = nil
                     self.updatesItem.attributedTitle = self.updatesAttr("Check for Updates…", ver: self.version)
@@ -235,33 +251,70 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return false
     }
 
-    private func downloadUpdate(_ up: (version: String, url: URL)) {
+    private func downloadUpdate(_ up: (version: String, zip: URL, sums: URL?)) {
         let downloads = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Downloads")
-        let zipPath = downloads.appendingPathComponent("Lidless-v\(up.version).zip")
+        let zipPath = downloads.appendingPathComponent("Lidless-v\(safeVersion(up.version)).zip")
         let appPath = downloads.appendingPathComponent("Lidless.app")
         updatesItem.attributedTitle = updatesAttr("Downloading…", ver: up.version)
-        URLSession.shared.downloadTask(with: up.url) { [weak self] tmp, _, err in
-            DispatchQueue.main.async {
-                guard let self else { return }
-                guard let tmp, err == nil else {
-                    self.alert("Download failed", "Opening the releases page instead.")
-                    self.open(self.repoURLReleases); return
+        URLSession.shared.downloadTask(with: up.zip) { [weak self] tmp, _, err in
+            guard let self else { return }
+            func fail(_ title: String, _ msg: String) {
+                DispatchQueue.main.async {
+                    self.updatesItem.attributedTitle = self.updatesAttr("Check for Updates…", ver: self.version)
+                    self.alert(title, msg)
+                    self.open(self.repoURLReleases)
                 }
-                try? FileManager.default.removeItem(at: zipPath)
-                guard (try? FileManager.default.moveItem(at: tmp, to: zipPath)) != nil else {
-                    self.open(self.repoURLReleases); return
-                }
-                // авто-распаковка → показываем готовую Lidless.app, а не архив
-                try? FileManager.default.removeItem(at: appPath)
-                _ = self.run("/usr/bin/ditto", ["-x", "-k", zipPath.path, downloads.path])
-                if FileManager.default.fileExists(atPath: appPath.path) {
+            }
+            guard let tmp, err == nil else { fail("Download failed", "Opening the releases page instead."); return }
+
+            // Сохраняем скачанный архив
+            try? FileManager.default.removeItem(at: zipPath)
+            guard (try? FileManager.default.moveItem(at: tmp, to: zipPath)) != nil else {
+                fail("Download failed", "Couldn’t save the update."); return
+            }
+
+            // 1) Целостность: SHA-256 против опубликованного SHA256SUMS (если ассет есть).
+            if let sums = up.sums {
+                let sumsText = self.fetchText(sums, timeout: 15) ?? ""
+                guard let expected = self.expectedHash(in: sumsText, for: expectedAssetName),
+                      let actual = self.sha256(ofFileAt: zipPath) else {
                     try? FileManager.default.removeItem(at: zipPath)
-                    NSWorkspace.shared.activateFileViewerSelecting([appPath])
-                    self.updatesItem.attributedTitle = self.updatesAttr("Downloaded — drag to /Applications")
-                } else {
+                    fail("Update verification failed", "Couldn’t verify the download’s checksum. Grab it from the releases page.")
+                    return
+                }
+                guard actual.caseInsensitiveCompare(expected) == .orderedSame else {
+                    try? FileManager.default.removeItem(at: zipPath)
+                    fail("Update verification failed", "Checksum mismatch — the download was not trusted and has been removed.")
+                    return
+                }
+            }
+
+            // Распаковка
+            try? FileManager.default.removeItem(at: appPath)
+            _ = self.run("/usr/bin/ditto", ["-x", "-k", zipPath.path, downloads.path])
+            guard FileManager.default.fileExists(atPath: appPath.path) else {
+                DispatchQueue.main.async {
                     NSWorkspace.shared.activateFileViewerSelecting([zipPath])
                     self.updatesItem.attributedTitle = self.updatesAttr("Downloaded")
                 }
+                return
+            }
+
+            // 2) Подлинность: валидная подпись Developer ID + ожидаемый Team ID.
+            //    Это главный барьер цепочки поставки — подделать без приватного ключа нельзя.
+            guard self.codesignValid(appPath), self.teamID(of: appPath) == expectedTeamID else {
+                try? FileManager.default.removeItem(at: appPath)
+                try? FileManager.default.removeItem(at: zipPath)
+                fail("Update rejected",
+                     "The downloaded app isn’t signed by Lidless’s Developer ID, so it was removed. Download manually from the releases page.")
+                return
+            }
+
+            // Проверено → показываем готовую .app, а не архив
+            try? FileManager.default.removeItem(at: zipPath)
+            DispatchQueue.main.async {
+                NSWorkspace.shared.activateFileViewerSelecting([appPath])
+                self.updatesItem.attributedTitle = self.updatesAttr("Verified — drag to /Applications")
             }
         }.resume()
     }
@@ -337,9 +390,83 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let pipe = Pipe()
         p.standardOutput = pipe
         p.standardError = Pipe()
-        do { try p.run(); p.waitUntilExit() } catch { return nil }
+        do { try p.run() } catch { return nil }
+        // Читаем ДО waitUntilExit: иначе крупный вывод переполнит буфер пайпа,
+        // процесс зависнет на write, а wait — навсегда (классический дедлок).
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
         return String(data: data, encoding: .utf8)
+    }
+
+    // Запуск с кодом возврата + stdout + stderr (codesign пишет метаданные в stderr).
+    @discardableResult
+    private func runStatus(_ path: String, _ args: [String]) -> (status: Int32, out: String, err: String) {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: path)
+        p.arguments = args
+        let o = Pipe(), e = Pipe()
+        p.standardOutput = o
+        p.standardError = e
+        do { try p.run() } catch { return (-1, "", "") }
+        let od = o.fileHandleForReading.readDataToEndOfFile()
+        let ed = e.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        return (p.terminationStatus,
+                String(data: od, encoding: .utf8) ?? "",
+                String(data: ed, encoding: .utf8) ?? "")
+    }
+
+    // SHA-256 файла в hex (нижний регистр).
+    private func sha256(ofFileAt url: URL) -> String? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
+    // Достаёт ожидаемый хэш из текста SHA256SUMS (строки вида "<hash>␣␣<filename>").
+    private func expectedHash(in sumsText: String, for filename: String) -> String? {
+        for line in sumsText.split(whereSeparator: { $0 == "\n" || $0 == "\r" }) {
+            let cols = line.split(whereSeparator: { $0 == " " || $0 == "\t" }).filter { !$0.isEmpty }
+            if cols.count >= 2, cols.last.map(String.init) == filename { return String(cols[0]) }
+        }
+        return nil
+    }
+
+    // Валидность подписи кода (строгая проверка bundle, включая вложенный код).
+    private func codesignValid(_ app: URL) -> Bool {
+        runStatus("/usr/bin/codesign", ["--verify", "--strict", app.path]).status == 0
+    }
+
+    // Team ID из подписи: `codesign -dvvv` печатает "TeamIdentifier=XX…" в stderr.
+    private func teamID(of app: URL) -> String? {
+        let r = runStatus("/usr/bin/codesign", ["-dvvv", app.path])
+        for line in (r.err + "\n" + r.out).split(whereSeparator: { $0 == "\n" || $0 == "\r" }) {
+            if line.hasPrefix("TeamIdentifier=") {
+                return String(line.dropFirst("TeamIdentifier=".count))
+            }
+        }
+        return nil
+    }
+
+    // Имя файла из tag_name недоверенное (API/MITM) — оставляем только безопасные
+    // символы, чтобы исключить path traversal (`v../../…`) при удалении/записи.
+    private func safeVersion(_ v: String) -> String {
+        let s = v.filter { ($0.isASCII && $0.isLetter) || $0.isNumber || $0 == "." || $0 == "-" }
+        return s.isEmpty ? "update" : s
+    }
+
+    // Загрузка маленького текстового ассета (SHA256SUMS) с жёстким таймаутом —
+    // не блокируем поток бесконечно, если CDN тупит.
+    private func fetchText(_ url: URL, timeout: TimeInterval) -> String? {
+        var req = URLRequest(url: url)
+        req.timeoutInterval = timeout
+        let sem = DispatchSemaphore(value: 0)
+        var result: String?
+        URLSession.shared.dataTask(with: req) { data, _, _ in
+            if let data { result = String(data: data, encoding: .utf8) }
+            sem.signal()
+        }.resume()
+        _ = sem.wait(timeout: .now() + timeout + 2)
+        return result
     }
 }
 
