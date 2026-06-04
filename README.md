@@ -148,7 +148,7 @@ If Lidless has bought you a few walks across town — saved a build, a render, o
 
 [MIT](LICENSE) — use it, fork it, read every line of it. Built by **Sasha Yakovlev** · [app@ykv.lv](mailto:app@ykv.lv).
 
-[github.com/sshykvlv/lidless](https://github.com/sshykvlv/lidless)
+**[lidless.ykv.lv](https://lidless.ykv.lv)** · [github.com/sshykvlv/lidless](https://github.com/sshykvlv/lidless)
 
 <div align="center">
 <sub>Made for people who'd rather close the lid and keep moving.</sub>
