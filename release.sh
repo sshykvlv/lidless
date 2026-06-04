@@ -2,7 +2,7 @@
 # Подписывает Developer ID + нотаризует + staple + пакует zip для передачи.
 # Требует: сертификат "Developer ID Application" в keychain и notary-профиль.
 #   xcrun notarytool store-credentials keepawake-notary \
-#       --apple-id YOU@APPLEID --team-id NDQ958367W --password xxxx-xxxx-xxxx-xxxx
+#       --apple-id YOU@APPLEID --team-id J2Q78NFXZX --password xxxx-xxxx-xxxx-xxxx
 set -euo pipefail
 cd "$(dirname "$0")"
 
