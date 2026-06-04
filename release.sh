@@ -45,4 +45,6 @@ spctl -a -vvv "$APP" 2>&1 || true
 # 7) финальный zip для отправки
 rm -f "$OUT"
 ditto -c -k --keepParent "$APP" "$OUT"
-echo "✅ Готово: $OUT — этот файл можно отправлять другу."
+# checksums рядом с релизом (для проверки целостности)
+( cd "$(dirname "$OUT")" && shasum -a 256 "$(basename "$OUT")" > SHA256SUMS )
+echo "✅ Готово: $OUT (+ SHA256SUMS) — этот файл можно отправлять другу."
