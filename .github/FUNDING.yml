@@ -1,2 +1,2 @@
-# Shows a "Sponsor" button on the repo. Replace with the real Stripe Payment Link.
-custom: ["https://example.com/REPLACE-with-stripe-payment-link"]
+# Shows a "Sponsor" button on the repo → Stripe Payment Link (pay-what-you-want).
+custom: ["https://buy.stripe.com/5kQ14ogr4dq9fky4Mm0Jq02"]

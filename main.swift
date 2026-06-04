@@ -5,29 +5,30 @@ import IOKit.ps
 // Пути фиксированные — sudoers разрешает ровно /usr/bin/pmset
 let pmsetPath = "/usr/bin/pmset"
 let sudoPath = "/usr/bin/sudo"
-let donateURL = "https://www.buymeacoffee.com/REPLACE_ME"   // TODO: подставить реальный handle
+let donateURL = "https://buy.stripe.com/5kQ14ogr4dq9fky4Mm0Jq02"   // Stripe Payment Link (pay-what-you-want, NORM)
 let repoURL = "https://github.com/sshykvlv/lidless"
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
 
-    private let toggleItem  = NSMenuItem(title: "Keep Awake (Lid Closed)", action: #selector(toggleKeepAwake), keyEquivalent: "")
+    private let toggleItem  = NSMenuItem(title: "Keep Awake with Lid Closed", action: #selector(toggleKeepAwake), keyEquivalent: "")
     private let warningItem = NSMenuItem(title: "On — keep an eye on battery & heat", action: nil, keyEquivalent: "")
     private let statusLine  = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-    private let autoOffParent = NSMenuItem(title: "Auto-off", action: nil, keyEquivalent: "")
-    private let batteryParent = NSMenuItem(title: "Battery floor", action: nil, keyEquivalent: "")
+    private let batteryParent = NSMenuItem(title: "Battery cutoff", action: nil, keyEquivalent: "")
     private let loginItem   = NSMenuItem(title: "Launch at Login", action: #selector(toggleLogin), keyEquivalent: "")
+    private let updatesItem = NSMenuItem(title: "Check for Updates…", action: #selector(updatesClicked), keyEquivalent: "")
+    private var pendingUpdate: (version: String, url: URL)?
 
-    private let autoOffOptions: [(String, TimeInterval)] = [("Off", 0), ("After 1 hour", 3600), ("After 2 hours", 7200)]
-    private let floorOptions:   [(String, Int)]          = [("Off", 0), ("10%", 10), ("15%", 15), ("20%", 20), ("30%", 30)]
-
-    private var autoOffDuration: TimeInterval = 0
-    private var autoOffFireDate: Date?
-    private var autoOffTimer: Timer?
-    private var batteryTimer: Timer?
+    // Единственное подменю — отсечка по батарее (жёсткий минимализм).
+    private let floorOptions: [(String, Int)] = [("Off", 0), ("10%", 10), ("20%", 20), ("30%", 30)]
     private var batteryFloor: Int {
         get { UserDefaults.standard.integer(forKey: "batteryFloor") }
         set { UserDefaults.standard.set(newValue, forKey: "batteryFloor") }
+    }
+    private var batteryTimer: Timer?
+
+    private var version: String {
+        (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "1.0"
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -45,45 +46,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(statusLine)
         menu.addItem(.separator())
 
-        autoOffParent.submenu = buildSubmenu(autoOffOptions.map { $0.0 }, action: #selector(selectAutoOff(_:)))
-        menu.addItem(autoOffParent)
-        batteryParent.submenu = buildSubmenu(floorOptions.map { $0.0 }, action: #selector(selectFloor(_:)))
+        // Группа настроек: battery floor + launch (без разделителя между ними)
+        batteryParent.submenu = buildFloorMenu()
         menu.addItem(batteryParent)
-        menu.addItem(.separator())
-
         loginItem.target = self
         menu.addItem(loginItem)
         menu.addItem(.separator())
 
-        let donate = NSMenuItem(title: "L✦ve it? Fuel it", action: #selector(openDonate), keyEquivalent: "")
+        // Мета-группа: донат, GitHub, апдейты
+        let donate = NSMenuItem(title: "L✦ve it? Leave a tip", action: #selector(openDonate), keyEquivalent: "")
         donate.target = self
-        let dt = NSMutableAttributedString(
-            string: "L✦ve it? Fuel it\n",
-            attributes: [.font: NSFont.menuFont(ofSize: 0)])
-        dt.append(NSAttributedString(
-            string: "Leave a tip",
-            attributes: [.font: NSFont.menuFont(ofSize: NSFont.smallSystemFontSize),
-                         .foregroundColor: NSColor.secondaryLabelColor]))
-        donate.attributedTitle = dt
+        donate.attributedTitle = donateAttr()
         menu.addItem(donate)
         addLink(to: menu, title: "View on GitHub", action: #selector(openRepo))
+        updatesItem.target = self
+        updatesItem.attributedTitle = updatesAttr("Check for Updates…", ver: version)
+        menu.addItem(updatesItem)
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: "Quit Lidless", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         statusItem.menu = menu
 
         batteryTimer = Timer.scheduledTimer(timeInterval: 60, target: self,
                                             selector: #selector(checkBatteryFloor), userInfo: nil, repeats: true)
         refresh()
+        checkUpdates(announce: false)  // тихая авто-проверка при запуске
     }
 
-    // MARK: - Построение меню
+    // MARK: - Меню
 
-    private func buildSubmenu(_ titles: [String], action: Selector) -> NSMenu {
+    private func buildFloorMenu() -> NSMenu {
         let m = NSMenu()
-        for (i, t) in titles.enumerated() {
-            let it = NSMenuItem(title: t, action: action, keyEquivalent: "")
-            it.target = self
-            it.tag = i
+        for (i, opt) in floorOptions.enumerated() {
+            let it = NSMenuItem(title: opt.0, action: #selector(selectFloor(_:)), keyEquivalent: "")
+            it.target = self; it.tag = i
             m.addItem(it)
         }
         return m
@@ -95,7 +90,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(it)
     }
 
-    // MARK: - Чтение/установка состояния
+    // Заголовок «Check for Updates…» + версия мелким серым справа
+    private func updatesAttr(_ main: String, ver: String? = nil) -> NSAttributedString {
+        let s = NSMutableAttributedString(string: main, attributes: [.font: NSFont.menuFont(ofSize: 0)])
+        if let ver = ver {
+            s.append(NSAttributedString(string: "   v\(ver)", attributes: [
+                .font: NSFont.menuFont(ofSize: NSFont.smallSystemFontSize),
+                .foregroundColor: NSColor.secondaryLabelColor]))
+        }
+        return s
+    }
+
+    // «L✦ve it? Leave a tip» — звезда крупнее и золотая
+    private func donateAttr() -> NSAttributedString {
+        let f = NSFont.menuFont(ofSize: 0)
+        let small = NSFont.menuFont(ofSize: f.pointSize - 1)  // чуть мельче, цвет как у текста
+        let s = NSMutableAttributedString()
+        s.append(NSAttributedString(string: "L", attributes: [.font: f]))
+        s.append(NSAttributedString(string: "✦", attributes: [.font: small]))
+        s.append(NSAttributedString(string: "ve it? Leave a tip", attributes: [.font: f]))
+        return s
+    }
+
+    // MARK: - Состояние
 
     private func isKeepAwakeOn() -> Bool {
         let out = run(pmsetPath, ["-g"]) ?? ""
@@ -111,40 +128,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func setKeepAwake(_ on: Bool) {
         let value = on ? "1" : "0"
-        // 1) беспарольно (если есть sudoers drop-in)
         _ = run(sudoPath, ["-n", pmsetPath, "-a", "disablesleep", value])
-        // 2) иначе — системное окно с паролем
         if isKeepAwakeOn() != on {
             let script = "do shell script \"\(pmsetPath) -a disablesleep \(value)\" with administrator privileges"
             _ = run("/usr/bin/osascript", ["-e", script])
         }
-        if isKeepAwakeOn() && autoOffDuration > 0 { armAutoOff() } else { cancelAutoOff() }
         refresh()
     }
 
     @objc private func toggleKeepAwake() { setKeepAwake(!isKeepAwakeOn()) }
-
-    // MARK: - Auto-off по таймеру
-
-    private func armAutoOff() {
-        cancelAutoOff()
-        guard autoOffDuration > 0 else { return }
-        autoOffFireDate = Date().addingTimeInterval(autoOffDuration)
-        autoOffTimer = Timer.scheduledTimer(withTimeInterval: autoOffDuration, repeats: false) { [weak self] _ in
-            self?.setKeepAwake(false)
-        }
-    }
-    private func cancelAutoOff() {
-        autoOffTimer?.invalidate(); autoOffTimer = nil; autoOffFireDate = nil
-    }
-
-    @objc private func selectAutoOff(_ sender: NSMenuItem) {
-        autoOffDuration = autoOffOptions[sender.tag].1
-        if isKeepAwakeOn() && autoOffDuration > 0 { armAutoOff() } else { cancelAutoOff() }
-        refresh()
-    }
-
-    // MARK: - Battery floor
 
     @objc private func selectFloor(_ sender: NSMenuItem) {
         batteryFloor = floorOptions[sender.tag].1
@@ -159,9 +151,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         for ps in list {
             guard let desc = IOPSGetPowerSourceDescription(blob, ps)?.takeUnretainedValue() as? [String: Any],
                   let cur = desc[kIOPSCurrentCapacityKey] as? Int,
-                  let max = desc[kIOPSMaxCapacityKey] as? Int, max > 0
+                  let mx = desc[kIOPSMaxCapacityKey] as? Int, mx > 0
             else { continue }
-            let pct = Int((Double(cur) / Double(max)) * 100.0)
+            let pct = Int((Double(cur) / Double(mx)) * 100.0)
             let onBatt = (desc[kIOPSPowerSourceStateKey] as? String) == kIOPSBatteryPowerValue
             return (onBatt, pct)
         }
@@ -172,10 +164,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard isKeepAwakeOn(), batteryFloor > 0,
               let b = batteryInfo(), b.onBattery, b.percent <= batteryFloor
         else { return }
-        setKeepAwake(false)  // страховка: не дать разрядить в ноль
+        setKeepAwake(false)  // не дать разрядить в ноль
     }
 
-    // MARK: - Прочие действия
+    // MARK: - Прочее
 
     @objc private func toggleLogin() {
         do {
@@ -191,10 +183,96 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         refresh()
     }
 
-    @objc private func openDonate() { if let u = URL(string: donateURL) { NSWorkspace.shared.open(u) } }
-    @objc private func openRepo()   { if let u = URL(string: repoURL)   { NSWorkspace.shared.open(u) } }
+    @objc private func openDonate() { open(donateURL) }
+    @objc private func openRepo()   { open(repoURL) }
+    private func open(_ s: String) { if let u = URL(string: s) { NSWorkspace.shared.open(u) } }
 
-    // MARK: - Обновление UI
+    // MARK: - Авто-проверка апдейтов (A+: сама находит и качает zip в Downloads)
+
+    @objc private func updatesClicked() {
+        if let up = pendingUpdate { downloadUpdate(up) }
+        else { checkUpdates(announce: true) }
+    }
+
+    private func checkUpdates(announce: Bool) {
+        guard let api = URL(string: "https://api.github.com/repos/sshykvlv/lidless/releases/latest") else { return }
+        var req = URLRequest(url: api)
+        req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        URLSession.shared.dataTask(with: req) { [weak self] data, _, _ in
+            guard let self else { return }
+            guard let data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let tag = json["tag_name"] as? String else {
+                if announce { DispatchQueue.main.async { self.alert("Couldn’t check for updates", "Please try again later.") } }
+                return
+            }
+            let latest = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
+            let assets = json["assets"] as? [[String: Any]] ?? []
+            let zip = assets.compactMap { a -> String? in
+                ((a["name"] as? String)?.hasSuffix(".zip") == true) ? a["browser_download_url"] as? String : nil
+            }.first
+            DispatchQueue.main.async {
+                if self.isNewer(latest, than: self.version), let z = zip, let u = URL(string: z) {
+                    self.pendingUpdate = (latest, u)
+                    self.updatesItem.attributedTitle = self.updatesAttr("↓ Update available", ver: latest)
+                    if announce { self.downloadUpdate((latest, u)) }
+                } else {
+                    self.pendingUpdate = nil
+                    self.updatesItem.attributedTitle = self.updatesAttr("Check for Updates…", ver: self.version)
+                    if announce { self.alert("You’re up to date", "Lidless v\(self.version) is the latest version.") }
+                }
+            }
+        }.resume()
+    }
+
+    private func isNewer(_ a: String, than b: String) -> Bool {
+        func parts(_ s: String) -> [Int] { s.split(separator: ".").map { Int($0) ?? 0 } }
+        let x = parts(a), y = parts(b)
+        for i in 0..<Swift.max(x.count, y.count) {
+            let xi = i < x.count ? x[i] : 0, yi = i < y.count ? y[i] : 0
+            if xi != yi { return xi > yi }
+        }
+        return false
+    }
+
+    private func downloadUpdate(_ up: (version: String, url: URL)) {
+        let downloads = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Downloads")
+        let zipPath = downloads.appendingPathComponent("Lidless-v\(up.version).zip")
+        let appPath = downloads.appendingPathComponent("Lidless.app")
+        updatesItem.attributedTitle = updatesAttr("Downloading…", ver: up.version)
+        URLSession.shared.downloadTask(with: up.url) { [weak self] tmp, _, err in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                guard let tmp, err == nil else {
+                    self.alert("Download failed", "Opening the releases page instead.")
+                    self.open(self.repoURLReleases); return
+                }
+                try? FileManager.default.removeItem(at: zipPath)
+                guard (try? FileManager.default.moveItem(at: tmp, to: zipPath)) != nil else {
+                    self.open(self.repoURLReleases); return
+                }
+                // авто-распаковка → показываем готовую Lidless.app, а не архив
+                try? FileManager.default.removeItem(at: appPath)
+                _ = self.run("/usr/bin/ditto", ["-x", "-k", zipPath.path, downloads.path])
+                if FileManager.default.fileExists(atPath: appPath.path) {
+                    try? FileManager.default.removeItem(at: zipPath)
+                    NSWorkspace.shared.activateFileViewerSelecting([appPath])
+                    self.updatesItem.attributedTitle = self.updatesAttr("Downloaded — drag to /Applications")
+                } else {
+                    NSWorkspace.shared.activateFileViewerSelecting([zipPath])
+                    self.updatesItem.attributedTitle = self.updatesAttr("Downloaded")
+                }
+            }
+        }.resume()
+    }
+
+    private var repoURLReleases: String { repoURL + "/releases/latest" }
+
+    private func alert(_ title: String, _ msg: String) {
+        let a = NSAlert(); a.messageText = title; a.informativeText = msg; a.runModal()
+    }
+
+    // MARK: - UI
 
     func menuWillOpen(_ menu: NSMenu) { refresh() }
 
@@ -203,29 +281,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         toggleItem.state = on ? .on : .off
         warningItem.isHidden = !on
 
-        var parts: [String] = []
-        if let b = batteryInfo() {
-            parts.append(b.onBattery ? "Battery \(b.percent)%" : "Charging \(b.percent)%")
+        if on, let b = batteryInfo() {
+            statusLine.title = b.onBattery ? "On battery · \(b.percent)%" : "Charging · \(b.percent)%"
+            statusLine.isHidden = false
+        } else {
+            statusLine.isHidden = true
         }
-        if on, let fire = autoOffFireDate {
-            let rem = Swift.max(0, Int(fire.timeIntervalSinceNow))
-            parts.append("auto-off in \(rem / 3600)h \((rem % 3600) / 60)m")
-        }
-        statusLine.title = parts.joined(separator: " · ")
-        statusLine.isHidden = parts.isEmpty
 
         let img = makeSparkleImage(on: on)
         img.accessibilityDescription = on ? "Awake with lid closed" : "Normal sleep"
         statusItem.button?.image = img
 
-        if let m = autoOffParent.submenu {
-            for it in m.items { it.state = (autoOffOptions[it.tag].1 == autoOffDuration) ? .on : .off }
-        }
-        autoOffParent.title = autoOffDuration > 0 ? "Auto-off: \(Int(autoOffDuration) / 3600)h" : "Auto-off"
         if let m = batteryParent.submenu {
             for it in m.items { it.state = (floorOptions[it.tag].1 == batteryFloor) ? .on : .off }
         }
-        batteryParent.title = batteryFloor > 0 ? "Battery floor: \(batteryFloor)%" : "Battery floor"
+        batteryParent.title = batteryFloor > 0 ? "Off when battery \(batteryFloor)%" : "Battery cutoff: off"
 
         loginItem.state = (SMAppService.mainApp.status == .enabled) ? .on : .off
     }
@@ -257,7 +327,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return img
     }
 
-    // MARK: - Запуск подпроцесса
+    // MARK: - Подпроцесс
 
     @discardableResult
     private func run(_ path: String, _ args: [String]) -> String? {

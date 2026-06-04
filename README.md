@@ -6,7 +6,13 @@
 
 **Close the lid. Keep working.**
 
-A macOS menu-bar app that keeps your Mac awake with the lid shut — so the build, the agent, the render, the upload, *whatever you started* keeps going while you walk out the door.
+A macOS menu-bar app that keeps your Mac awake with the lid shut — **no external monitor needed** — so the build, the agent, the render, the upload, *whatever you started* keeps going while you walk out the door.
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-FFD60A.svg)](LICENSE)
+![macOS 13+](https://img.shields.io/badge/macOS-13%2B-1d1d1f?logo=apple&logoColor=white)
+![Universal](https://img.shields.io/badge/binary-Universal%20%28arm64%20%2B%20Intel%29-7c5cf0)
+![Notarized](https://img.shields.io/badge/notarized-by%20Apple-2ea44f)
+![Price](https://img.shields.io/badge/price-free-FFD60A)
 
 <sub>Notarized · Universal (Apple Silicon + Intel) · macOS 13+ · ~1–2 MB · No daemon, no telemetry</sub>
 
@@ -55,12 +61,12 @@ Glance at the star and you know the state. It reads straight from the system, so
 
 ## Who it's for
 
-- **🚶 The AI-coding nomad.** You're running Claude or a coding agent on your MacBook and remote-driving the work from your phone. You zip the laptop into your backpack, walk across the city, and the agent keeps building with the lid shut. The build finishes while you're crossing the street. *This is the one.*
+- **🚶 The AI-coding nomad.** You're running Claude Code, Codex, Cursor or another coding agent on your MacBook and remote-driving the work from your phone. You zip the laptop into your backpack, walk across the city, and the agent keeps building with the lid shut. The build finishes while you're crossing the street. *This is the one.*
 - **🎬 The render-and-go crowd.** Long video exports, audio bounces, image batches — kick it off, close the lid, go get lunch.
 - **⬆️ Anyone moving big bytes.** Multi-gigabyte uploads and downloads you don't want guillotined the moment the hinge clicks shut.
 - **🛠️ Compile-and-test people.** Heavy builds and slow test suites that need the machine alive, not the human — running clamshell on your desk, no external display required.
 - **🔌 SSH stay-reachable folks.** Keep the Mac on the network and reachable while it sits closed on a shelf — a little always-on box that doesn't nap when you fold it shut.
-- **🎵 The kitchen DJ.** Mac plugged into the speakers, lid down, music playing — no awkward propped-open laptop on the counter.
+- **💾 The backup-and-bolt type.** Let Time Machine or a cloud sync finish before you unplug and pack up — no propped-open laptop required.
 
 ---
 
@@ -126,13 +132,13 @@ No daemon. No kext. No telemetry — it doesn't phone home because there's nothi
 
 If Lidless has bought you a few walks across town — saved a build, a render, or your sanity — a tip buys the next coffee.
 
-> Donation link *(coming soon)*
+> ☕ [**Leave a tip**](https://buy.stripe.com/5kQ14ogr4dq9fky4Mm0Jq02) — pay what you want, entirely optional.
 
 ---
 
 ## License
 
-[MIT](LICENSE) — use it, fork it, read every line of it. Built by **Sasha Yakovlev**.
+[MIT](LICENSE) — use it, fork it, read every line of it. Built by **Sasha Yakovlev** · [app@ykv.lv](mailto:app@ykv.lv).
 
 [github.com/sshykvlv/lidless](https://github.com/sshykvlv/lidless)
 
