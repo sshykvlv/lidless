@@ -12,7 +12,7 @@ A macOS menu-bar app that keeps your Mac awake with the lid shut — so the buil
 
 <br />
 
-<img src="assets/menu.png" alt="The Lidless menu" width="360" />
+<img src="assets/menu.png" alt="The Lidless menu" width="440" />
 
 </div>
 
