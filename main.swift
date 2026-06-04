@@ -9,7 +9,7 @@ let sudoPath = "/usr/bin/sudo"
 let donateURL = "https://buy.stripe.com/5kQ14ogr4dq9fky4Mm0Jq02"   // Stripe Payment Link (pay-what-you-want, NORM)
 let repoURL = "https://github.com/sshykvlv/lidless"
 // Auto-update принимает ТОЛЬКО бинарь, подписанный этим Developer ID Team ID.
-let expectedTeamID = "NDQ958367W"
+let expectedTeamID = "J2Q78NFXZX"
 let expectedAssetName = "Lidless.zip"
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
