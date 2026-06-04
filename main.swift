@@ -253,7 +253,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func downloadUpdate(_ up: (version: String, zip: URL, sums: URL?)) {
         let downloads = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Downloads")
-        let zipPath = downloads.appendingPathComponent("Lidless-v\(up.version).zip")
+        let zipPath = downloads.appendingPathComponent("Lidless-v\(safeVersion(up.version)).zip")
         let appPath = downloads.appendingPathComponent("Lidless.app")
         updatesItem.attributedTitle = updatesAttr("Downloading…", ver: up.version)
         URLSession.shared.downloadTask(with: up.zip) { [weak self] tmp, _, err in
@@ -275,7 +275,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
             // 1) Целостность: SHA-256 против опубликованного SHA256SUMS (если ассет есть).
             if let sums = up.sums {
-                let sumsText = (try? String(contentsOf: sums, encoding: .utf8)) ?? ""
+                let sumsText = self.fetchText(sums, timeout: 15) ?? ""
                 guard let expected = self.expectedHash(in: sumsText, for: expectedAssetName),
                       let actual = self.sha256(ofFileAt: zipPath) else {
                     try? FileManager.default.removeItem(at: zipPath)
@@ -442,6 +442,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
         return nil
+    }
+
+    // Имя файла из tag_name недоверенное (API/MITM) — оставляем только безопасные
+    // символы, чтобы исключить path traversal (`v../../…`) при удалении/записи.
+    private func safeVersion(_ v: String) -> String {
+        let s = v.filter { ($0.isASCII && $0.isLetter) || $0.isNumber || $0 == "." || $0 == "-" }
+        return s.isEmpty ? "update" : s
+    }
+
+    // Загрузка маленького текстового ассета (SHA256SUMS) с жёстким таймаутом —
+    // не блокируем поток бесконечно, если CDN тупит.
+    private func fetchText(_ url: URL, timeout: TimeInterval) -> String? {
+        var req = URLRequest(url: url)
+        req.timeoutInterval = timeout
+        let sem = DispatchSemaphore(value: 0)
+        var result: String?
+        URLSession.shared.dataTask(with: req) { data, _, _ in
+            if let data { result = String(data: data, encoding: .utf8) }
+            sem.signal()
+        }.resume()
+        _ = sem.wait(timeout: .now() + timeout + 2)
+        return result
     }
 }
 
