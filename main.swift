@@ -390,8 +390,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let pipe = Pipe()
         p.standardOutput = pipe
         p.standardError = Pipe()
-        do { try p.run(); p.waitUntilExit() } catch { return nil }
+        do { try p.run() } catch { return nil }
+        // Читаем ДО waitUntilExit: иначе крупный вывод переполнит буфер пайпа,
+        // процесс зависнет на write, а wait — навсегда (классический дедлок).
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
         return String(data: data, encoding: .utf8)
     }
 
