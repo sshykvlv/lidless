@@ -20,3 +20,6 @@
 
 ## 2026-08-26 22:49 — GPT-5.6 Sol
 Объединил три финальных Markdown-check в один JavaScript `functions.exec` с насыщенным shell-экранированием → V8 отклонил wrapper с `SyntaxError: Invalid or unexpected token` до запуска команд. Для regex-heavy shell-проверок использовать отдельные короткие `exec_command` вызовы или заранее проверенные строки вместо сложного `Promise.all`-wrapper.
+
+## 2026-08-26 22:52 — GPT-5.6 Sol
+Готовил `.worktrees/` по workflow и опирался на `rg --files`, который без `--hidden` не показал tracked `.gitignore` → `apply_patch Add File` фактически заменил 23 существующие ignore-строки одной, и отдельный commit успел уйти в remote. Ошибка обнаружена сразу по появившимся untracked build-артефактам; восстановил содержимое из `HEAD^`, добавив только новые ignore-правила, без удаления пользовательских файлов. Перед созданием любого dotfile всегда проверять `git ls-files <path>` и `test -e`, а не `rg --files` по умолчанию.
