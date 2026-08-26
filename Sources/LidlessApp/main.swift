@@ -1,17 +1,26 @@
 import AppKit
+import Darwin
+import ServiceManagement
 
-private final class BootstrapAppDelegate: NSObject, NSApplicationDelegate {
-    private var statusItem: NSStatusItem?
+private let arguments = Array(CommandLine.arguments.dropFirst())
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.title = "✦"
-        statusItem = item
-    }
+if arguments == ["--uninstall-helper"] {
+  Task { @MainActor in
+    let service = SMAppService.daemon(plistName: "lv.ykv.lidless.helper.plist")
+    let client = XPCScheduledHelperClient()
+    let outcome = await UninstallCoordinator(client: client, service: service)
+      .run(activeCoordinator: nil)
+    print(outcome.renderedLine)
+    Darwin.exit(outcome.succeeded ? EXIT_SUCCESS : EXIT_FAILURE)
+  }
+  RunLoop.main.run()
+} else if arguments.isEmpty {
+  let application = NSApplication.shared
+  let delegate = AppDelegate()
+  application.delegate = delegate
+  application.setActivationPolicy(.accessory)
+  application.run()
+} else {
+  FileHandle.standardError.write(Data("Usage: Lidless [--uninstall-helper]\n".utf8))
+  Darwin.exit(EX_USAGE)
 }
-
-let application = NSApplication.shared
-private let delegate = BootstrapAppDelegate()
-application.delegate = delegate
-application.setActivationPolicy(.accessory)
-application.run()

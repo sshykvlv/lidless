@@ -118,9 +118,11 @@ public final class HelperStatusMessage: NSObject, NSSecureCoding {
   public static let supportsSecureCoding = true
 
   public let status: HelperStatus
+  public let observedSleepDisabled: Bool?
 
-  public init(status: HelperStatus) {
+  public init(status: HelperStatus, observedSleepDisabled: Bool? = nil) {
     self.status = status
+    self.observedSleepDisabled = observedSleepDisabled
     super.init()
   }
 
@@ -130,6 +132,9 @@ public final class HelperStatusMessage: NSObject, NSSecureCoding {
     }
 
     let sessionID = coder.decodeObject(of: NSUUID.self, forKey: CodingKey.sessionID) as UUID?
+    let observedSleepDisabled =
+      coder.decodeBool(forKey: CodingKey.hasObservedSleepDisabled)
+      ? coder.decodeBool(forKey: CodingKey.observedSleepDisabled) : nil
     let hasLeaseDeadline = coder.decodeBool(forKey: CodingKey.hasLeaseDeadline)
     let leaseDeadline = hasLeaseDeadline ? coder.decodeDouble(forKey: CodingKey.leaseDeadline) : nil
     if let leaseDeadline, !leaseDeadline.isFinite {
@@ -165,6 +170,7 @@ public final class HelperStatusMessage: NSObject, NSSecureCoding {
       lastDisarmReason: lastDisarmReason,
       fault: fault
     )
+    self.observedSleepDisabled = observedSleepDisabled
     super.init()
   }
 
@@ -172,6 +178,13 @@ public final class HelperStatusMessage: NSObject, NSSecureCoding {
     coder.encode(status.state.rawValue, forKey: CodingKey.state)
     if let sessionID = status.sessionID {
       coder.encode(sessionID as NSUUID, forKey: CodingKey.sessionID)
+    }
+    coder.encode(
+      observedSleepDisabled != nil,
+      forKey: CodingKey.hasObservedSleepDisabled
+    )
+    if let observedSleepDisabled {
+      coder.encode(observedSleepDisabled, forKey: CodingKey.observedSleepDisabled)
     }
     coder.encode(status.leaseDeadline != nil, forKey: CodingKey.hasLeaseDeadline)
     if let leaseDeadline = status.leaseDeadline {
@@ -190,6 +203,8 @@ public final class HelperStatusMessage: NSObject, NSSecureCoding {
   private enum CodingKey {
     static let state = "state"
     static let sessionID = "sessionID"
+    static let hasObservedSleepDisabled = "hasObservedSleepDisabled"
+    static let observedSleepDisabled = "observedSleepDisabled"
     static let hasLeaseDeadline = "hasLeaseDeadline"
     static let leaseDeadline = "leaseDeadline"
     static let hasLastDisarmReason = "hasLastDisarmReason"
@@ -216,6 +231,7 @@ public enum HelperReplyCode: Int, Equatable, Sendable {
   case invalidRequest
   case externallyDisabled
   case notReady
+  case manualCleanupRequired
 }
 
 @objc(LidlessHelperReply)

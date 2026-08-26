@@ -74,6 +74,8 @@ targets:
       - target: LidlessHelper
         embed: false
       - sdk: IOKit.framework
+      - sdk: ServiceManagement.framework
+      - sdk: UserNotifications.framework
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: lv.ykv.lidless

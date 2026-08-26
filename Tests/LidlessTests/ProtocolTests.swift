@@ -52,7 +52,7 @@ final class ProtocolTests: XCTestCase {
     )
     let original = HelperReply(
       code: .ok,
-      status: HelperStatusMessage(status: status)
+      status: HelperStatusMessage(status: status, observedSleepDisabled: true)
     )
 
     let data = try NSKeyedArchiver.archivedData(
@@ -64,6 +64,7 @@ final class ProtocolTests: XCTestCase {
     XCTAssertEqual(decoded.code, .ok)
     XCTAssertTrue(decoded.succeeded)
     XCTAssertEqual(decoded.status.status, status)
+    XCTAssertEqual(decoded.status.observedSleepDisabled, true)
   }
 
   func testRequirementsPinIdentifiersAndTeam() {

@@ -5,6 +5,7 @@ readonly ROOT="$(cd "$(dirname "$0")" && pwd)"
 readonly SOURCE_APP="$ROOT/Lidless.app"
 readonly EXPECTED_TEAM_ID="J2Q78NFXZX"
 readonly EXPECTED_BUNDLE_ID="lv.ykv.lidless"
+readonly EXPECTED_HELPER_ID="lv.ykv.lidless.helper"
 
 destination="/Applications/Lidless.app"
 build_first=true
@@ -25,6 +26,12 @@ USAGE
 team_identifier() {
     codesign -dv --verbose=4 "$1" 2>&1 \
         | sed -n 's/^TeamIdentifier=//p' \
+        | head -n 1
+}
+
+signing_identifier() {
+    codesign -dv --verbose=4 "$1" 2>&1 \
+        | sed -n 's/^Identifier=//p' \
         | head -n 1
 }
 
@@ -52,6 +59,10 @@ validate_bundle() {
     fi
     if [[ "$(team_identifier "$helper")" != "$EXPECTED_TEAM_ID" ]]; then
         echo "LidlessHelper is not signed by Team ID $EXPECTED_TEAM_ID" >&2
+        return 1
+    fi
+    if [[ "$(signing_identifier "$helper")" != "$EXPECTED_HELPER_ID" ]]; then
+        echo "Unexpected helper signing identifier" >&2
         return 1
     fi
 }

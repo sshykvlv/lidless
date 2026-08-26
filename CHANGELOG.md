@@ -13,11 +13,15 @@
 - Serial helper ownership state machine with crash recovery, 30-second monotonic leases, disconnect handling, fail-closed renewals, and retryable fault state.
 - Versioned secure-coding XPC contract with per-connection ownership, exact operation allowlist, signed-client authentication, and bounded recovery retry.
 - Event-driven IOKit battery sampling with internal-battery selection, a signed helper client, 10-second lease renewal, and scoped App Nap activity.
+- Native menu states for helper registration/approval, authoritative active/restoring/fault/external ownership, explicit recovery, bounded diagnostics, and verified Quit/Uninstall flows.
+- Exact historical-grant migrator that refuses unknown paths, contents, owners, modes, file types, and sizes.
 
 ### Changed
 
 - Began replacing the polling-only battery cutoff with a fail-safe helper architecture tracked in issue #4.
+- Replaced the legacy single-file polling UI and privilege fallback with a signed `SMAppService` lifecycle and bounded authenticated XPC.
 
 ### Removed
 
 - New installs no longer create or modify `/etc/sudoers.d/lidless`.
+- Removed the legacy root `main.swift` and `Info.plist`; XcodeGen sources are now canonical.

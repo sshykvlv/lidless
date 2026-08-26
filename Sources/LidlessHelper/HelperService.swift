@@ -13,6 +13,7 @@ final class HelperRuntime: @unchecked Sendable {
   private static let recoveryDelays: [TimeInterval] = [1, 2, 4, 8, 15]
 
   private let engine: HelperEngine
+  private let legacyGrantMigrator: LegacyGrantMigrator
   private let monotonicClock: any MonotonicClock
   private let queue = DispatchQueue(label: "lv.ykv.lidless.helper.runtime")
   private let restartHandler: @Sendable () -> Void
@@ -32,10 +33,12 @@ final class HelperRuntime: @unchecked Sendable {
 
   init(
     engine: HelperEngine,
+    legacyGrantMigrator: LegacyGrantMigrator = LegacyGrantMigrator(),
     monotonicClock: any MonotonicClock = SystemMonotonicClock(),
     restartHandler: @escaping @Sendable () -> Void = { Darwin.exit(EX_TEMPFAIL) }
   ) {
     self.engine = engine
+    self.legacyGrantMigrator = legacyGrantMigrator
     self.monotonicClock = monotonicClock
     self.restartHandler = restartHandler
     _ = timer
@@ -49,7 +52,11 @@ final class HelperRuntime: @unchecked Sendable {
 
   func status() -> HelperStatusMessage {
     queue.sync {
-      HelperStatusMessage(status: engine.status())
+      let observed = try? engine.observeSleepDisabled()
+      return HelperStatusMessage(
+        status: engine.status(),
+        observedSleepDisabled: observed
+      )
     }
   }
 
@@ -116,9 +123,18 @@ final class HelperRuntime: @unchecked Sendable {
     }
   }
 
-  func unavailableReply() -> HelperReply {
+  func removeRecognizedLegacyGrant() -> HelperReply {
     queue.sync {
-      makeReply(code: .notReady)
+      do {
+        try engine.verifyInactiveForRestart()
+        let result = try legacyGrantMigrator.removeRecognizedGrants()
+        return makeReply(code: result == .manualCleanupRequired ? .manualCleanupRequired : .ok)
+      } catch {
+        if error is HelperError {
+          return makeReply(code: replyCode(for: error))
+        }
+        return makeReply(code: .manualCleanupRequired)
+      }
     }
   }
 
@@ -263,7 +279,7 @@ final class HelperSessionService: NSObject, LidlessHelperXPC {
   }
 
   func removeRecognizedLegacyGrant(reply: @escaping (HelperReply) -> Void) {
-    reply(runtime.unavailableReply())
+    reply(runtime.removeRecognizedLegacyGrant())
   }
 
   func restoreNormalSleepAfterConfirmation(reply: @escaping (HelperReply) -> Void) {

@@ -86,3 +86,15 @@ Metadata gate нашёл отсутствующий `LSUIElement`, но `set -e`
 
 ## 2026-08-26 23:49 — GPT-5.6 Sol
 Добавил cleanup в `deinit` у `@MainActor` IOKit/XPC/Timer adapters → Swift 6 рассматривает обычный destructor как nonisolated и запрещает читать non-Sendable Foundation/CoreFoundation свойства. Для main-thread cleanup на текущем toolchain нужен `isolated deinit`, а не снятие cleanup или unchecked Sendable у системных объектов.
+
+## 2026-08-26 23:55 — GPT-5.6 Sol
+Компилировал legacy-permission table tests → массив octal literals вывелся как `[Int]`, а fixture намеренно принимает `UInt16` как POSIX mode width, поэтому focused test остановился до выполнения. Для таблиц mode нужен явный element type `UInt16`.
+
+## 2026-08-26 23:58 — GPT-5.6 Sol
+Добавлял публичный authoritative-observation метод сразу после `HelperEngine.status()` → patch context попал до закрывающей скобки метода, и компилятор увидел `public` в local scope. При вставке рядом с короткими `queue.sync` методами нужно перечитать границы обеих закрывающих скобок до сборки.
+
+## 2026-08-27 00:13 — GPT-5.6 Sol
+Собирал menu lifecycle против macOS 26 SDK → `SMAppService.unregister()` импортируется как async, хотя старые примеры и исходный план показывают синхронный вызов; одновременно локальная копия IUO `helperClient` сохранила Optional-тип внутри async refresh. Нужны явный `await` и `guard let` при snapshot захвате клиента.
+
+## 2026-08-27 00:17 — GPT-5.6 Sol
+Проверял exit code bounded CLI через zsh-переменную `status` → zsh резервирует её как read-only special parameter, и успешные предшествующие static checks закончились ошибкой harness. Для exit code нужны task-specific имена вроде `lidless_exit`.

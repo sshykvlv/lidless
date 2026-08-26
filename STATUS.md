@@ -16,7 +16,7 @@ Tracking issue: [#4 — Make battery cutoff fail-safe and harden update/release 
 - [x] Helper state machine enforces ownership, verified restoration, recovery, external-change handling, and the 30-second liveness lease.
 - [x] XPC accepts only the signed Lidless client and exposes fixed operations.
 - [x] App coordinator renews every 10 seconds under scoped App Nap activity.
-- [ ] Menu renders authoritative helper state.
+- [x] Menu renders authoritative helper state, registration/approval state, and external ownership.
 - [ ] Updater validates a read-only DMG before extraction and performs rollback-capable atomic replacement.
 - [ ] Release artifacts pass signing, notarization, stapling, Gatekeeper, checksum, and Homebrew verification.
 
@@ -75,3 +75,13 @@ Tracking issue: [#4 — Make battery cutoff fail-safe and harden update/release 
 - Verified exact 10-second renewal interval, immediate `<= floor` disarm on notification/floor change, local teardown after every helper failure, and protection against an old arm callback stopping a replacement session.
 - Live read-only IOKit snapshot returned `Battery Power`, an `InternalBattery`, and a valid `61/100` capacity tuple on the development Mac.
 - Built app contains the fixed privileged Mach service name and still has no `NSAppSleepDisabled` key.
+
+### 2026-08-27 — Visible helper lifecycle and exact legacy cleanup
+
+- `./build.sh test -only-testing:LidlessTests/LegacyGrantMigratorTests` — 7 fixed-path/content/metadata tests passed, exit 0.
+- `./build.sh test` — 59 total tests passed, 0 failures, exit 0.
+- Thread Sanitizer run of all 59 tests — 0 failures and no sanitizer reports.
+- `./build.sh app` — complete menu app and helper built universal; app/helper signing identifiers and Team ID passed build gates.
+- Project-layout and rollback installer contracts passed against the completed signed bundle; invalid CLI arguments exit with `EX_USAGE` without starting UI.
+- Verified external keep-awake state is observed but never claimed, helper approval has an explicit System Settings action, XPC calls are bounded to five seconds, and custom Quit tears down scoped activity before termination.
+- Legacy cleanup inspects only `/etc/sudoers.d/lidless` and `/etc/sudoers.d/keepawake`, rejects symlinks/edited/writable/non-root/oversized files, and leaves every unknown case for manual review.

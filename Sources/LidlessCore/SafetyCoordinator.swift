@@ -190,6 +190,15 @@ public final class SafetyCoordinator {
     }
   }
 
+  public func helperConnectionLost() {
+    guard state != .idle else {
+      return
+    }
+    state = .idle
+    stopLocalResources()
+    notifier.notify(.helperRecoveryPending)
+  }
+
   private func evaluateFreshSampleAndRenew() async {
     guard isArmed else {
       return

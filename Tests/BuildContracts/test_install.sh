@@ -21,6 +21,8 @@ touch "$destination/previous-version"
 test -x "$destination/Contents/MacOS/Lidless"
 test -x "$destination/Contents/Library/HelperTools/LidlessHelper"
 codesign --verify --deep --strict "$destination"
+test "$(codesign -dv --verbose=4 "$destination/Contents/Library/HelperTools/LidlessHelper" 2>&1 | sed -n 's/^Identifier=//p')" = "lv.ykv.lidless.helper"
+test "$(codesign -dv --verbose=4 "$destination/Contents/Library/HelperTools/LidlessHelper" 2>&1 | sed -n 's/^TeamIdentifier=//p')" = "J2Q78NFXZX"
 
 backup_count="$(find "$applications_dir" -maxdepth 1 -type d -name 'Lidless.app.backup-*' | wc -l | tr -d ' ')"
 test "$backup_count" = "1"

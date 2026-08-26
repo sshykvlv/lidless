@@ -14,7 +14,7 @@ A macOS menu-bar app that keeps your Mac awake with the lid shut — **no extern
 ![Notarized](https://img.shields.io/badge/notarized-by%20Apple-2ea44f)
 ![Price](https://img.shields.io/badge/price-free-FFD60A)
 
-<sub>Notarized · Universal (Apple Silicon + Intel) · macOS 13+ · ~1–2 MB · No daemon, no telemetry</sub>
+<sub>Notarized · Universal (Apple Silicon + Intel) · macOS 13+ · Signed fail-safe helper · No telemetry</sub>
 
 <br />
 
@@ -85,28 +85,23 @@ The **Battery floor** has your back on power — it cuts to normal sleep before 
 
 ## How it works *(no magic, no hand-waving)*
 
-macOS has exactly one switch that overrides "lid closed → go to sleep": `pmset disablesleep`. Lidless flips that switch on when you want to stay awake, flips it off when you don't, and reads the current state back from `pmset -g` so the star always tells the truth.
+macOS has exactly one switch that overrides "lid closed → go to sleep": `pmset disablesleep`. Lidless changes that switch through a signed root helper registered with Apple's `SMAppService` API. macOS shows the helper as a Background Item, and you approve it through System Settings when required.
 
-That's the entire mechanism. No fake keystrokes, no background daemon pretending you moved the mouse. One real system setting, toggled honestly. It's essentially one Swift file driving a native `NSMenu` — you could read the whole thing over a coffee.
+The helper exposes only fixed Lidless operations over authenticated XPC. It accepts the signed Lidless app from Team ID `J2Q78NFXZX`; it does not accept a command, path, shell, or arbitrary `pmset` value. Before disabling sleep it writes a small owner-only recovery journal, verifies the system readback, and gives the app a 30-second lease. The app renews every 10 seconds and also reacts immediately to IOKit battery notifications.
 
-Changing that setting needs admin rights, so you get two honest paths:
-
-1. **Zero setup.** The first time you toggle, macOS shows its standard admin-password dialog. Authenticate and you're done. Nothing is installed behind your back.
-2. **One-time passwordless grant.** Prefer never to see the dialog again? Building with `install.sh` adds a narrow `sudoers` rule scoped to *exactly* the two `pmset -a disablesleep` on/off commands the app issues — and nothing else — so toggling is silent from then on.
-
-No background helper hangs around. No invisible privileged daemon. What you see is what runs.
+If the app quits, crashes, is force-killed, stops renewing, or reports an unsafe battery sample, the helper restores normal lid sleep. A threshold of 10% means **10% or below**, not one polling cycle later. If another tool already owns the keep-awake setting, Lidless labels it as external and leaves it untouched unless you explicitly confirm **Restore Normal Lid Sleep…**.
 
 ---
 
 ## Install
 
-### Download (recommended — the no-grant path)
+### Download (recommended)
 
 1. Grab the latest [**GitHub Release**](https://github.com/sshykvlv/lidless/releases/latest).
 2. Unzip and drag **Lidless.app** into `/Applications`.
 3. Double-click it.
 
-It just *opens*. Lidless is **notarized by Apple** under a Developer ID, so there's no "unidentified developer" wall, no right-click-then-Open dance, no Gatekeeper detour. It ships as a **universal binary** — native on Apple Silicon and Intel — and needs **macOS 13 (Ventura) or newer**. The first time you toggle it on, macOS asks for your admin password once; approve it and you're set.
+It just *opens*. Lidless is **notarized by Apple** under a Developer ID, so there's no "unidentified developer" wall or Gatekeeper detour. It ships as a **universal binary** — native on Apple Silicon and Intel — and needs **macOS 13 (Ventura) or newer**. The first setup registers its visible signed helper; if macOS requests approval, choose **Approve Helper in System Settings…** from the Lidless menu.
 
 ### Homebrew
 
@@ -114,9 +109,9 @@ It just *opens*. Lidless is **notarized by Apple** under a Developer ID, so ther
 brew install --cask sshykvlv/tap/lidless
 ```
 
-Same notarized build, managed by Homebrew. To remove it later: `brew uninstall --cask lidless` (add `--zap` to also clear preferences and any `pmset` grant).
+Same notarized build, managed by Homebrew. Before removing the app, use **Uninstall helper…** in Lidless so normal sleep is verified and the Background Item is unregistered. The cask also invokes the bounded `--uninstall-helper` mode.
 
-### Build from source *(adds the passwordless grant)*
+### Build from source
 
 ```sh
 git clone https://github.com/sshykvlv/lidless.git
@@ -124,15 +119,17 @@ cd lidless
 ./install.sh
 ```
 
-`install.sh` builds the app, drops it in `/Applications`, **and** writes the one-line passwordless `pmset` grant — so toggling never prompts again. It asks for your admin password once (via the system dialog) to install that `sudoers` rule. Requires the Xcode command-line tools. When it's done, look for the star in your menu bar. *(Want no grant at all? Use the Release download above instead.)*
+`install.sh` builds a universal signed app, validates both the app and nested helper, keeps one timestamped backup for rollback, and installs it in `/Applications`. It never creates or edits an admin grant. Requires XcodeGen and the Xcode command-line tools. When it opens, choose **Set Up Helper…** and complete any visible macOS approval.
 
 ---
 
 ## Why so small, why so quiet
 
-Because a thing that keeps your Mac awake shouldn't need a Dock icon, a settings window with twelve tabs, a phone-home analytics pipeline, or a launch daemon you'll find two years from now and not remember installing.
+Because a thing that keeps your Mac awake shouldn't need a Dock icon, a settings window with twelve tabs, or a phone-home analytics pipeline.
 
-No daemon. No kext. No telemetry — it doesn't phone home because there's nothing to phone home about. It does one job, makes its one privileged action explicit, weighs almost nothing, and ships every line of its source under MIT. That's the whole design philosophy, and it fits in a sentence.
+No kext and no telemetry. The one privileged component is a visible, signed, uninstallable helper with a narrow protocol and an expiring lease. Choose **Copy diagnostics** to copy a bounded snapshot of versions, enum states, battery percentage/floor, the observed sleep boolean, and five recent Lidless error codes — never a journal, username, raw command output, or arbitrary path.
+
+To remove it, choose **Uninstall helper…** first. Lidless verifies normal sleep, unregisters the fixed service, and removes an old `lidless`/`keepawake` permission only when its owner, mode, path, size, and contents exactly match a historical rule. Anything edited or unfamiliar is left for manual review.
 
 ---
 

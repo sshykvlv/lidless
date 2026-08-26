@@ -156,6 +156,18 @@ final class SafetyCoordinatorTests: XCTestCase {
     XCTAssertEqual(scheduler.interval, 10)
   }
 
+  func testHelperInvalidationStopsAllLocalResourcesImmediately() async throws {
+    try await armAt(80, floor: 10)
+
+    coordinator.helperConnectionLost()
+
+    XCTAssertFalse(coordinator.isArmed)
+    XCTAssertFalse(activity.isActive)
+    XCTAssertFalse(battery.isMonitoring)
+    XCTAssertNil(scheduler.interval)
+    XCTAssertEqual(notifier.events.last, .helperRecoveryPending)
+  }
+
   private func armAt(_ percentage: Int, floor: Int) async throws {
     battery.next = sample(.battery, percentage)
     try await coordinator.arm(floor: BatteryFloor(floor)!)
