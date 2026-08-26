@@ -90,7 +90,7 @@ final class HdiutilDiskImageAttacher: DiskImageAttaching, @unchecked Sendable {
 
 }
 
-final class UpdateStager: UpdateStaging {
+final class UpdateStager: UpdateStaging, @unchecked Sendable {
   private static let maximumBundleBytes: Int64 = 128 * 1_024 * 1_024
   private static let maximumDiskImageBytes: Int64 = 32 * 1_024 * 1_024
 

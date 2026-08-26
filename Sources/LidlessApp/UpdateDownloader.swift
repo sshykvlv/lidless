@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import LidlessCore
 
@@ -9,11 +10,15 @@ enum UpdateDownloadError: Error, Equatable {
   case tooManyRedirects
   case invalidText
   case temporaryFileCreationFailed
+  case unsafeTemporaryFile
 }
 
-final class BoundedDownloader: UpdateDownloading {
+final class BoundedDownloader: UpdateDownloading, @unchecked Sendable {
   static let maximumDiskImageBytes: Int64 = 32 * 1_024 * 1_024
   static let maximumTextBytes = 64 * 1_024
+
+  private let fileLock = NSLock()
+  private var downloadedFiles: Set<URL> = []
 
   func download(_ request: URLRequest, maximumBytes: Int64) async throws -> URL {
     guard maximumBytes > 0, maximumBytes <= Self.maximumDiskImageBytes else {
@@ -29,10 +34,33 @@ final class BoundedDownloader: UpdateDownloading {
     )
     do {
       _ = try await transfer.start()
+      _ = fileLock.withLock { downloadedFiles.insert(file) }
       return file
     } catch {
       try? FileManager.default.removeItem(at: file)
       throw error
+    }
+  }
+
+  func removeDownloadedFile(_ url: URL) throws {
+    try fileLock.withLock {
+      guard downloadedFiles.contains(url) else {
+        throw UpdateDownloadError.unsafeTemporaryFile
+      }
+      let temporaryRoot = FileManager.default.temporaryDirectory.standardizedFileURL
+        .resolvingSymlinksInPath()
+      let file = url.standardizedFileURL
+      var metadata = stat()
+      guard file.deletingLastPathComponent().resolvingSymlinksInPath().path == temporaryRoot.path,
+        file.lastPathComponent.hasPrefix("lv.ykv.lidless.download-"),
+        lstat(file.path, &metadata) == 0,
+        metadata.st_mode & S_IFMT == S_IFREG,
+        file.resolvingSymlinksInPath().path == file.path
+      else {
+        throw UpdateDownloadError.unsafeTemporaryFile
+      }
+      try FileManager.default.removeItem(at: file)
+      downloadedFiles.remove(url)
     }
   }
 

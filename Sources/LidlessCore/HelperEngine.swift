@@ -36,6 +36,7 @@ public enum DisarmReason: Int, Equatable, Sendable {
   case recovery
   case activationFailure
   case appQuit
+  case update
 }
 
 public enum HelperFault: Int, Equatable, Sendable {

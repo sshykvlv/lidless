@@ -14,9 +14,21 @@ if arguments == ["--uninstall-helper"] {
     Darwin.exit(outcome.succeeded ? EXIT_SUCCESS : EXIT_FAILURE)
   }
   RunLoop.main.run()
-} else if arguments.isEmpty {
+} else if arguments.isEmpty
+  || (arguments.count == 4 && arguments[0] == "--cleanup-old-app"
+    && arguments[2] == "--confirmation-token")
+{
+  let cleanupRequest: UpdateLaunchCleanupRequest?
+  if arguments.isEmpty {
+    cleanupRequest = nil
+  } else {
+    cleanupRequest = UpdateLaunchCleanupRequest(
+      oldAppSibling: URL(fileURLWithPath: arguments[1]),
+      token: arguments[3]
+    )
+  }
   let application = NSApplication.shared
-  let delegate = AppDelegate()
+  let delegate = AppDelegate(launchCleanupRequest: cleanupRequest)
   application.delegate = delegate
   application.setActivationPolicy(.accessory)
   application.run()

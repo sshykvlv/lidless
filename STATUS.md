@@ -17,7 +17,7 @@ Tracking issue: [#4 — Make battery cutoff fail-safe and harden update/release 
 - [x] XPC accepts only the signed Lidless client and exposes fixed operations.
 - [x] App coordinator renews every 10 seconds under scoped App Nap activity.
 - [x] Menu renders authoritative helper state, registration/approval state, and external ownership.
-- [ ] Updater validates a read-only DMG before extraction and performs rollback-capable atomic replacement.
+- [x] Updater validates a read-only DMG before extraction and performs rollback-capable atomic replacement.
 - [ ] Release artifacts pass signing, notarization, stapling, Gatekeeper, checksum, and Homebrew verification.
 
 ## Evidence
@@ -115,3 +115,13 @@ Tracking issue: [#4 — Make battery cutoff fail-safe and harden update/release 
 - `./build.sh app` — bounded downloader, fixed hdiutil adapter, and private stager compiled into both universal slices; all signing/build gates passed.
 - `Tests/Fixtures/UpdateStagerSmoke.swift` against a generated UDZO image — `mount=read_only candidate=exact detach=ok cleanup=ok`.
 - Downloads enforce HTTPS, no credentials, public destinations, at most five redirects, 30-second timeouts, and actual 32 MiB / 64 KiB byte ceilings; staging rejects non-regular DMGs and any mounted tree over 128 MiB.
+
+### 2026-08-27 — Verified atomic updater
+
+- RED: ordered coordinator tests failed before the update coordinator, identity policy, and compound failure reporting existed; the rollback cleanup test then exposed an unreported secondary cleanup failure.
+- Focused coordinator, identity-policy, release-metadata, and app-replacer tests passed, including checksum/identity/disarm/detach/cancellation failures, manual fallback, pre-swap revalidation, atomic rollback, and cleanup after a failed restored-service restart.
+- Thread Sanitizer run of the coordinator and real atomic-replacer tests — 12 tests passed with no sanitizer reports.
+- `./build.sh test` — 91 tests passed, 0 failures, 0 skipped, exit 0; count verified from the generated xcresult summary.
+- `./build.sh app` — app, updater, and background service built universal; signing/build gates passed for both slices.
+- `codesign --verify --deep --strict Lidless.app` — exit 0; source scans found no legacy Downloads app deletion or first-asset selection.
+- Release metadata is bounded and fixed-origin; the updater verifies SHA-256, signed identity, Team ID, hardened runtime, and Gatekeeper both before and after copying, detaches before restoring normal sleep, swaps only same-directory siblings with `RENAME_SWAP`, and rolls back if service restart or new-process confirmation fails.

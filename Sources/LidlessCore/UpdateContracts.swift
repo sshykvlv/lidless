@@ -1,9 +1,10 @@
 import Darwin
 import Foundation
 
-public protocol UpdateDownloading: AnyObject {
+public protocol UpdateDownloading: AnyObject, Sendable {
   func download(_ request: URLRequest, maximumBytes: Int64) async throws -> URL
   func text(_ request: URLRequest, maximumBytes: Int) async throws -> String
+  func removeDownloadedFile(_ url: URL) throws
 }
 
 public protocol DiskImageAttaching: AnyObject, Sendable {
@@ -11,8 +12,133 @@ public protocol DiskImageAttaching: AnyObject, Sendable {
   func detach(device: String) throws
 }
 
-public protocol UpdateStaging: AnyObject {
+public protocol UpdateStaging: AnyObject, Sendable {
   func mount(diskImage: URL, version: SemanticVersion) throws -> MountedUpdateSession
+}
+
+public protocol UpdateFileHashing: AnyObject, Sendable {
+  func sha256(of file: URL) throws -> String
+}
+
+public protocol StagedAppValidating: AnyObject, Sendable {
+  func validate(app: URL, expectedVersion: SemanticVersion) throws
+}
+
+public enum PreparedInstall: Equatable, Sendable {
+  case replacement(PreparedReplacement)
+  case manualInstall(diskImage: URL)
+}
+
+public struct PreparedReplacement: Equatable, Sendable {
+  public let installedApp: URL
+  public let stagedSibling: URL
+  public let version: SemanticVersion
+
+  public init(installedApp: URL, stagedSibling: URL, version: SemanticVersion) {
+    self.installedApp = installedApp
+    self.stagedSibling = stagedSibling
+    self.version = version
+  }
+}
+
+public struct ReplacementReceipt: Equatable, Sendable {
+  public let installedApp: URL
+  public let oldAppSibling: URL
+  public let version: SemanticVersion
+
+  public init(installedApp: URL, oldAppSibling: URL, version: SemanticVersion) {
+    self.installedApp = installedApp
+    self.oldAppSibling = oldAppSibling
+    self.version = version
+  }
+}
+
+public protocol AppReplacing: AnyObject, Sendable {
+  func prepare(
+    mountedApp: URL,
+    diskImage: URL,
+    installedApp: URL,
+    version: SemanticVersion,
+    expectedDiskImageSHA256: String
+  ) throws -> PreparedInstall
+  func commit(_ replacement: PreparedReplacement) throws -> ReplacementReceipt
+  func rollback(_ receipt: ReplacementReceipt) throws
+  func cleanup(_ prepared: PreparedInstall) throws
+}
+
+@MainActor
+public protocol UpdateHelperControlling: AnyObject, Sendable {
+  func disarmForUpdate() async throws
+  func restartAfterVerifiedUpdateSwap() async throws
+}
+
+@MainActor
+public protocol UpdatedAppLaunching: AnyObject, Sendable {
+  func launchNewInstance(
+    app: URL,
+    expectedVersion: SemanticVersion,
+    oldAppSibling: URL
+  ) async throws -> Int32
+}
+
+public enum UpdateFailureCode: Int, Equatable, Sendable {
+  case network
+  case manifest
+  case checksum
+  case mount
+  case identity
+  case detach
+  case disarm
+  case prepare
+  case swap
+  case helperRestart
+  case launch
+  case rollback
+  case cleanup
+}
+
+public enum UpdatePhase: Equatable, Sendable {
+  case checking
+  case downloading(SemanticVersion)
+  case verifying(SemanticVersion)
+  case mounting(SemanticVersion)
+  case preparing(SemanticVersion)
+  case installing(SemanticVersion)
+  case manualInstall(URL)
+  case finished(SemanticVersion)
+  case failed(UpdateFailureCode)
+}
+
+@MainActor
+public protocol UpdateReporting: AnyObject, Sendable {
+  func updatePhaseChanged(_ phase: UpdatePhase)
+}
+
+public struct UpdateInstallError: Error, Equatable, Sendable {
+  public let primary: UpdateFailureCode
+  public let relatedFailures: [UpdateFailureCode]
+
+  public var secondary: UpdateFailureCode? {
+    relatedFailures.first
+  }
+
+  public var tertiary: UpdateFailureCode? {
+    relatedFailures.dropFirst().first
+  }
+
+  public init(
+    primary: UpdateFailureCode,
+    secondary: UpdateFailureCode? = nil,
+    tertiary: UpdateFailureCode? = nil
+  ) {
+    self.primary = primary
+    relatedFailures = [secondary, tertiary].compactMap { $0 }
+  }
+
+  public init(primary: UpdateFailureCode, relatedFailures: [UpdateFailureCode]) {
+    self.primary = primary
+    self.relatedFailures = relatedFailures
+  }
 }
 
 public enum UpdateURLPolicyError: Error, Equatable, Sendable {

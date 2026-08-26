@@ -17,12 +17,14 @@
 - Exact historical-grant migrator that refuses unknown paths, contents, owners, modes, file types, and sizes.
 - Strict semantic-version, fixed release-URL, and bounded exact-checksum parsers for update artifacts.
 - Bounded credential-free HTTPS downloads plus private read-only DMG staging that accepts only one real top-level `Lidless.app` and detaches idempotently.
+- Signed update validation and rollback-capable same-directory atomic replacement, with verified-DMG manual fallback for unwritable installations.
 
 ### Changed
 
 - Began replacing the polling-only battery cutoff with a fail-safe helper architecture tracked in issue #4.
 - Replaced the legacy single-file polling UI and privilege fallback with a signed `SMAppService` lifecycle and bounded authenticated XPC.
 - Restored the original 18×18 menu-bar sparkle and replaced user-facing “helper” jargon with plain setup and Background Items language.
+- Replaced the synchronous legacy updater with bounded async release checks, explicit progress states, checksum/signature/Gatekeeper verification, and compound failure reporting.
 
 ### Removed
 

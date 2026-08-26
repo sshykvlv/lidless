@@ -105,6 +105,9 @@ targets:
     platform: macOS
     sources:
       - Tests/LidlessTests
+      - Sources/LidlessApp/AppReplacer.swift
+      - Sources/LidlessApp/SHA256FileHasher.swift
+      - Sources/LidlessApp/UpdateProcessRunner.swift
     dependencies:
       - target: LidlessCore
     settings:

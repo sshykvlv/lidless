@@ -3,7 +3,7 @@ import LidlessCore
 import ServiceManagement
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UpdateReporting {
   private static let helperPlistName = "lv.ykv.lidless.helper.plist"
   private static let floorDefaultsKey = "BatteryFloor"
   private static let legacyCleanupDefaultsKey = "LegacyGrantCleanupAttemptedV1"
@@ -14,9 +14,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private let scheduler = CommonModeRenewalScheduler()
   private let recorder = DiagnosticRecorder()
   private lazy var notifier = AppSafetyNotifier(recorder: recorder)
+  private let launchCleanupRequest: UpdateLaunchCleanupRequest?
 
   private var helperClient: XPCScheduledHelperClient!
   private var coordinator: SafetyCoordinator!
+  private var appUpdateCoordinator: UpdateCoordinator!
+  private var releaseChecker: GitHubReleaseChecker!
   private var statusItem: NSStatusItem!
   private let menu = NSMenu()
   private let statusMenuItem = NSMenuItem(
@@ -27,6 +30,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     title: "Restore Normal Lid Sleep…",
     action: nil,
     keyEquivalent: ""
+  )
+  private let updatesMenuItem = NSMenuItem(
+    title: "Check for Updates…", action: nil, keyEquivalent: ""
   )
   private let floorMenu = NSMenu()
 
@@ -41,14 +47,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private var didArmInThisRun = false
   private var lastNotifiedFaultCode: String?
   private var helperConnectionInvalidated = false
+  private var pendingRelease: ReleaseDescriptor?
+  private var updateInFlight = false
+  private var updateCleanupObserver: NSObjectProtocol?
   #if DEBUG
     private var smokeObserver: NSObjectProtocol?
   #endif
+
+  init(launchCleanupRequest: UpdateLaunchCleanupRequest? = nil) {
+    self.launchCleanupRequest = launchCleanupRequest
+    super.init()
+  }
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     NSApp.setActivationPolicy(.accessory)
     configureHelperStack()
     buildMenu()
+    installUpdateCleanupObserverIfNeeded()
     notifier.onEvent = { [weak self] in
       Task { @MainActor [weak self] in
         await self?.refreshState()
@@ -88,6 +103,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   func applicationWillTerminate(_ notification: Notification) {
+    if let updateCleanupObserver {
+      DistributedNotificationCenter.default().removeObserver(updateCleanupObserver)
+    }
     #if DEBUG
       if let smokeObserver {
         DistributedNotificationCenter.default().removeObserver(smokeObserver)
@@ -225,6 +243,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
   }
 
+  @objc private func checkForUpdates() {
+    guard !updateInFlight else { return }
+    if let pendingRelease {
+      confirmAndInstall(pendingRelease)
+      return
+    }
+
+    updateInFlight = true
+    updatesMenuItem.title = "Checking for Updates…"
+    updatesMenuItem.isEnabled = false
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      do {
+        let release = try await releaseChecker.latest()
+        let installed = try installedVersion()
+        if release.version > installed {
+          pendingRelease = release
+          updateInFlight = false
+          updatesMenuItem.title = "Install Lidless \(release.version)…"
+          updatesMenuItem.isEnabled = true
+          confirmAndInstall(release)
+        } else {
+          updateInFlight = false
+          updatesMenuItem.title = "Check for Updates…"
+          updatesMenuItem.isEnabled = true
+          showAlert(
+            title: "Lidless is up to date",
+            message: "You already have the latest version (\(installed))."
+          )
+        }
+      } catch {
+        updateInFlight = false
+        updatesMenuItem.title = "Check for Updates…"
+        updatesMenuItem.isEnabled = true
+        recorder.record("update.check_failed")
+        showAlert(
+          title: "Could not check for updates",
+          message: "Lidless could not verify the latest GitHub release. Try again later."
+        )
+      }
+    }
+  }
+
   @objc private func uninstallHelper() {
     let alert = NSAlert()
     alert.messageText = "Remove Lidless from Background Items?"
@@ -273,6 +334,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     self.helperClient = client
     self.coordinator = coordinator
     helperConnectionInvalidated = false
+    configureUpdaterStack()
 
     client.onInvalidation = { [weak self, weak client] in
       guard let self, let client, helperClient === client else {
@@ -343,6 +405,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     )
     diagnostics.target = self
     menu.addItem(diagnostics)
+
+    updatesMenuItem.target = self
+    updatesMenuItem.action = #selector(checkForUpdates)
+    menu.addItem(updatesMenuItem)
 
     let uninstall = NSMenuItem(
       title: "Remove Background Access…",
@@ -538,6 +604,150 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       return .notFound
     @unknown default:
       return .notFound
+    }
+  }
+
+  private func configureUpdaterStack() {
+    let downloader = BoundedDownloader()
+    let hasher = SHA256FileHasher()
+    let validator = StaticCodeValidator()
+    let replacer = AtomicAppReplacer(validator: validator, hasher: hasher)
+    releaseChecker = GitHubReleaseChecker(downloader: downloader)
+    appUpdateCoordinator = UpdateCoordinator(
+      downloader: downloader,
+      hasher: hasher,
+      stager: UpdateStager(),
+      validator: validator,
+      replacer: replacer,
+      helper: AppUpdateHelperController(safetyCoordinator: coordinator, client: helperClient),
+      launcher: UpdatedAppLauncher(),
+      reporter: self
+    )
+  }
+
+  private func installedVersion() throws -> SemanticVersion {
+    guard
+      let raw = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+    else {
+      throw SemanticVersionError.invalid
+    }
+    return try SemanticVersion(raw)
+  }
+
+  private func confirmAndInstall(_ release: ReleaseDescriptor) {
+    let alert = NSAlert()
+    alert.messageText = "Install Lidless \(release.version)?"
+    alert.informativeText =
+      "Lidless will verify the checksum, Apple signature, and Gatekeeper approval before replacing the app. Normal lid sleep is restored before the final swap."
+    alert.addButton(withTitle: "Install")
+    alert.addButton(withTitle: "Later")
+    guard alert.runModal() == .alertFirstButtonReturn else {
+      return
+    }
+
+    pendingRelease = nil
+    updateInFlight = true
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      do {
+        try await appUpdateCoordinator.install(release, installedApp: Bundle.main.bundleURL)
+      } catch {
+        updateInFlight = false
+        recorder.record("update.install_failed")
+      }
+    }
+  }
+
+  func updatePhaseChanged(_ phase: UpdatePhase) {
+    switch phase {
+    case .checking:
+      updatesMenuItem.title = "Preparing Update…"
+      updatesMenuItem.isEnabled = false
+    case .downloading(let version):
+      updatesMenuItem.title = "Downloading \(version)…"
+      updatesMenuItem.isEnabled = false
+    case .verifying:
+      updatesMenuItem.title = "Verifying Update…"
+      updatesMenuItem.isEnabled = false
+    case .mounting:
+      updatesMenuItem.title = "Opening Verified Update…"
+      updatesMenuItem.isEnabled = false
+    case .preparing:
+      updatesMenuItem.title = "Preparing Installation…"
+      updatesMenuItem.isEnabled = false
+    case .installing:
+      updatesMenuItem.title = "Installing Update…"
+      updatesMenuItem.isEnabled = false
+    case .manualInstall(let diskImage):
+      updateInFlight = false
+      updatesMenuItem.title = "Check for Updates…"
+      updatesMenuItem.isEnabled = true
+      NSWorkspace.shared.activateFileViewerSelecting([diskImage])
+      showAlert(
+        title: "Update ready in Downloads",
+        message: "Open the verified disk image and drag Lidless to Applications."
+      )
+    case .finished(let version):
+      updatesMenuItem.title = "Updated to \(version)"
+      stopStatusRefresh()
+      terminationApproved = true
+      NSApp.terminate(nil)
+    case .failed(let code):
+      updateInFlight = false
+      updatesMenuItem.title = "Update Failed — \(code)"
+      updatesMenuItem.isEnabled = true
+      showAlert(
+        title: "Lidless update stopped safely",
+        message:
+          "The update failed during \(code). The installed app was left unchanged or rolled back."
+      )
+    }
+  }
+
+  private func installUpdateCleanupObserverIfNeeded() {
+    guard let launchCleanupRequest else { return }
+    updateCleanupObserver = DistributedNotificationCenter.default().addObserver(
+      forName: UpdateLaunchConfirmation.name,
+      object: nil,
+      queue: .main
+    ) { [weak self] notification in
+      guard
+        let receivedToken =
+          notification.userInfo?[UpdateLaunchConfirmation.tokenKey] as? String
+      else {
+        return
+      }
+      Task { @MainActor [weak self] in
+        guard let self,
+          receivedToken == launchCleanupRequest.token
+        else {
+          return
+        }
+        if let updateCleanupObserver {
+          DistributedNotificationCenter.default().removeObserver(updateCleanupObserver)
+          self.updateCleanupObserver = nil
+        }
+        let oldApp = launchCleanupRequest.oldAppSibling
+        let installedApp = Bundle.main.bundleURL
+        Task { @MainActor [weak self] in
+          let cleanupResult = await Task.detached { () -> Result<Void, any Error> in
+            do {
+              let validator = StaticCodeValidator()
+              let replacer = AtomicAppReplacer(
+                validator: validator,
+                hasher: SHA256FileHasher()
+              )
+              try replacer.removeOldAppSibling(oldApp, installedApp: installedApp)
+              return .success(())
+            } catch {
+              return .failure(error)
+            }
+          }.value
+          if case .failure = cleanupResult {
+            self?.recorder.record("update.old_cleanup_failed")
+          }
+        }
+      }
     }
   }
 

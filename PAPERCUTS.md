@@ -122,3 +122,21 @@ Metadata gate нашёл отсутствующий `LSUIElement`, но `set -e`
 
 ## 2026-08-27 00:52 — GPT-5.6 Sol
 Добавил trap для удаления строго проверенного `mktemp` smoke-каталога через `rm -rf` → command safety layer отклонил весь скрипт до запуска как `rm -f style`, несмотря на узкую validated цель. Для одноразовых каталогов в этом окружении использовать `rm -R` без force после prefix-check.
+
+## 2026-08-27 01:05 — GPT-5.6 Sol
+Компилировал Security-framework validation по API names из плана → `kSecCSCheckAllArchitectures` импортируется как raw global, не `SecCSFlags.checkAllArchitectures`, а документированный `kSecCodeSignatureRuntime` из `CSCommon.h` вообще не экспортируется Swift overlay. Строить `SecCSFlags(rawValue:)` из первого global и проверять документированный runtime bit `0x10000` явно.
+
+## 2026-08-27 01:10 — GPT-5.6 Sol
+Отправлял межпроцессное подтверждение обновления через современный `NotificationCenter.post(...deliverImmediately:)` spelling → у `DistributedNotificationCenter` Swift overlay сохраняет legacy `postNotificationName`, поэтому universal build остановился на extra argument. Использовать его специализированный четырёхаргументный метод.
+
+## 2026-08-27 01:14 — GPT-5.6 Sol
+Возобновлял universal build после сжатия контекста по сохранённому process id → PTY-сессия уже была закрыта, а итоговый exit status оказался недоступен. После такого handoff сразу перепроверять сборку новой командой, не полагаясь на старый session id.
+
+## 2026-08-27 01:15 — GPT-5.6 Sol
+Собирал callback `DistributedNotificationCenter` под Swift 6 strict concurrency → передача целого Foundation `Notification` внутрь `@MainActor Task` была признана потенциальной гонкой. Извлекать из callback только необходимое Sendable-значение до перехода на actor.
+
+## 2026-08-27 01:17 — GPT-5.6 Sol
+Запускал `swift-format lint` на каталогах как formatter-команду → lint требует отдельный `--recursive`, а после исправления выдал большой накопленный style debt в старых файлах. Проверять только изменённые Swift-файлы, чтобы не смешивать текущую работу с существующим форматированием.
+
+## 2026-08-27 01:18 — GPT-5.6 Sol
+Механически переименовывал повторяющийся test helper через patch с неверным числом одинаковых hunks → весь patch ожидаемо не применился. Перед массовой заменой сначала считать точные вхождения через `rg`.
