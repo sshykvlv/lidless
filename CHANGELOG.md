@@ -15,6 +15,7 @@
 - Event-driven IOKit battery sampling with internal-battery selection, a signed helper client, 10-second lease renewal, and scoped App Nap activity.
 - Native menu states for helper registration/approval, authoritative active/restoring/fault/external ownership, explicit recovery, bounded diagnostics, and verified Quit/Uninstall flows.
 - Exact historical-grant migrator that refuses unknown paths, contents, owners, modes, file types, and sizes.
+- Strict semantic-version, fixed release-URL, and bounded exact-checksum parsers for update artifacts.
 
 ### Changed
 

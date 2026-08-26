@@ -99,3 +99,10 @@ Tracking issue: [#4 — Make battery cutoff fail-safe and harden update/release 
 - Removed “helper” terminology from visible menu items, alerts, state text, and notifications; setup now explains Background Items and automatic sleep recovery directly.
 - `./build.sh smoke-app` — universal Debug bundle built, signature gate passed, and the verified bundle was reinstalled in `/Applications`, exit 0.
 - Normal lid sleep was verified before quit, after quit, and after relaunch with `SleepDisabled 0`.
+
+### 2026-08-27 — Strict update metadata
+
+- RED: focused updater tests failed because `SemanticVersion`, `ReleaseDescriptor`, and `UpdateManifest` did not exist.
+- Focused semantic-version and checksum-manifest tests passed after implementing bounded exact parsers.
+- `./build.sh test` — 66 tests passed, 0 failures, 0 skipped, exit 0; count verified from the generated xcresult summary.
+- Release asset URLs are derived only from a validated three-part version, while manifests accept only lowercase 64-character SHA-256 entries tied to safe exact basenames.
