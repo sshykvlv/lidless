@@ -92,3 +92,10 @@ Tracking issue: [#4 — Make battery cutoff fail-safe and harden update/release 
 - `./build.sh app` plus release-string scan — universal Release bundle built and contains no Debug smoke notification name, exit 0.
 - `Scripts/smoke-helper.sh` passed shell syntax validation; its bounded controller fixture compiled for macOS 13 and accepts only fixed smoke operations.
 - Live matrix is pending the one visible macOS Background Item approval; baseline remains `SleepDisabled 0`.
+
+### 2026-08-27 — Menu icon and setup language
+
+- Restored the original path-rendered 18×18 sparkle instead of a font-dependent text glyph.
+- Removed “helper” terminology from visible menu items, alerts, state text, and notifications; setup now explains Background Items and automatic sleep recovery directly.
+- `./build.sh smoke-app` — universal Debug bundle built, signature gate passed, and the verified bundle was reinstalled in `/Applications`, exit 0.
+- Normal lid sleep was verified before quit, after quit, and after relaunch with `SleepDisabled 0`.

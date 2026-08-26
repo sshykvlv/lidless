@@ -22,7 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private let statusMenuItem = NSMenuItem(
     title: "Checking safety state…", action: nil, keyEquivalent: "")
   private let toggleMenuItem = NSMenuItem(title: "Keep Mac Awake", action: nil, keyEquivalent: "")
-  private let setupMenuItem = NSMenuItem(title: "Set Up Helper…", action: nil, keyEquivalent: "")
+  private let setupMenuItem = NSMenuItem(title: "Finish Setup…", action: nil, keyEquivalent: "")
   private let restoreMenuItem = NSMenuItem(
     title: "Restore Normal Lid Sleep…",
     action: nil,
@@ -123,7 +123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           showAlert(
             title: "Lidless could not start",
             message:
-              "Normal lid sleep was left unchanged. Check the helper status and battery floor."
+              "Normal lid sleep was left unchanged. Check Lidless setup and the battery cutoff."
           )
         }
       case .notRegistered:
@@ -167,7 +167,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       NSWorkspace.shared.open(url)
     case .notFound:
       showAlert(
-        title: "Helper is missing",
+        title: "Lidless installation is incomplete",
         message: "Install the complete signed Lidless.app bundle in /Applications and try again."
       )
     case .enabled:
@@ -227,10 +227,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
   @objc private func uninstallHelper() {
     let alert = NSAlert()
-    alert.messageText = "Uninstall the Lidless helper?"
+    alert.messageText = "Remove Lidless from Background Items?"
     alert.informativeText =
-      "Lidless will restore normal lid sleep, remove only a recognized historical grant, and unregister its fixed helper."
-    alert.addButton(withTitle: "Uninstall")
+      "Lidless will first restore normal lid sleep, clean up a recognized old permission, and remove its background access."
+    alert.addButton(withTitle: "Remove")
     alert.addButton(withTitle: "Cancel")
     guard alert.runModal() == .alertFirstButtonReturn else {
       return
@@ -242,7 +242,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       let outcome = await UninstallCoordinator(client: helperClient, service: service)
         .run(activeCoordinator: coordinator)
       showAlert(
-        title: outcome.succeeded ? "Helper uninstalled" : "Uninstall needs attention",
+        title: outcome.succeeded ? "Background access removed" : "Removal needs attention",
         message: outcome.succeeded
           ? "Normal lid sleep was verified. You can now move Lidless.app to the Trash."
           : "Some cleanup could not be verified. Copy diagnostics before removing the app."
@@ -299,7 +299,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
   private func buildMenu() {
     statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-    statusItem.button?.title = "✦"
+    let icon = makeSparkleImage(on: false)
+    icon.accessibilityDescription = "Normal lid sleep"
+    statusItem.button?.image = icon
     statusItem.menu = menu
     menu.delegate = self
 
@@ -343,7 +345,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     menu.addItem(diagnostics)
 
     let uninstall = NSMenuItem(
-      title: "Uninstall helper…",
+      title: "Remove Background Access…",
       action: #selector(uninstallHelper),
       keyEquivalent: ""
     )
@@ -441,10 +443,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       statusMenuItem.title = "Another tool keeps lid sleep disabled"
     case .helperNotRegistered:
       active = false
-      statusMenuItem.title = "Helper is not registered"
+      statusMenuItem.title = "Setup required"
     case .helperApprovalRequired:
       active = false
-      statusMenuItem.title = "Helper approval is required"
+      statusMenuItem.title = "Approval required in System Settings"
     case .restoring:
       active = false
       statusMenuItem.title = "Restoring normal lid sleep…"
@@ -458,15 +460,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     setupMenuItem.isHidden = service.status == .enabled
     setupMenuItem.title =
       service.status == .requiresApproval
-      ? "Approve Helper in System Settings…" : "Set Up Helper…"
+      ? "Allow Lidless in System Settings…" : "Finish Setup…"
     restoreMenuItem.isHidden = currentState != .externalKeepAwake
 
-    let color: NSColor = active ? .systemYellow : .secondaryLabelColor
-    statusItem.button?.attributedTitle = NSAttributedString(
-      string: "✦",
-      attributes: [.foregroundColor: color]
-    )
+    let icon = makeSparkleImage(on: active)
+    icon.accessibilityDescription = active ? "Awake with lid closed" : "Normal lid sleep"
+    statusItem.button?.image = icon
     updateFloorMenuChecks()
+  }
+
+  private func makeSparkleImage(on: Bool) -> NSImage {
+    let size: CGFloat = 18
+    let image = NSImage(size: NSSize(width: size, height: size))
+    image.lockFocus()
+    if let context = NSGraphicsContext.current?.cgContext {
+      let scale = (size - 2) / 116.0
+      func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+        CGPoint(x: (x - 42) * scale + 1, y: (158 - y) * scale + 1)
+      }
+
+      let path = CGMutablePath()
+      path.move(to: point(100, 42))
+      path.addQuadCurve(to: point(158, 100), control: point(116.81, 83.19))
+      path.addQuadCurve(to: point(100, 158), control: point(116.81, 116.81))
+      path.addQuadCurve(to: point(42, 100), control: point(83.19, 116.81))
+      path.addQuadCurve(to: point(100, 42), control: point(83.19, 83.19))
+      path.closeSubpath()
+      context.addPath(path)
+      (on ? NSColor.systemYellow : NSColor.black).setFill()
+      context.fillPath()
+    }
+    image.unlockFocus()
+    image.isTemplate = !on
+    return image
   }
 
   private func toggleIsEnabled(for state: MenuSafetyState) -> Bool {
@@ -517,10 +543,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
   private func confirmAndRegisterHelper() {
     let alert = NSAlert()
-    alert.messageText = "Enable the Lidless safety helper?"
+    alert.messageText = "Allow Lidless to run in the background?"
     alert.informativeText =
-      "macOS installs the signed Lidless helper as a visible Background Item. It owns only the fixed lid-sleep switch and restores it after crashes or a lost 30-second lease."
-    alert.addButton(withTitle: "Enable Helper")
+      "This lets Lidless control lid sleep and automatically restore normal sleep if the app closes or stops responding. macOS will show Lidless under Background Items."
+    alert.addButton(withTitle: "Continue")
     alert.addButton(withTitle: "Cancel")
     guard alert.runModal() == .alertFirstButtonReturn else {
       return
@@ -532,7 +558,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     } catch {
       recorder.record("helper.registration_failed")
       showAlert(
-        title: "Helper registration failed",
+        title: "Setup failed",
         message: "Move the signed Lidless.app to /Applications and try again."
       )
     }

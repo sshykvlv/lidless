@@ -101,3 +101,9 @@ Metadata gate нашёл отсутствующий `LSUIElement`, но `set -e`
 
 ## 2026-08-27 00:28 — GPT-5.6 Sol
 Форматировал standalone Swift smoke-control fixture с `switch` cases в виде array destructuring (`case ["battery", let value]`) → Swift не поддерживает pattern matching содержимого Array и formatter завершился до build. Для bounded CLI сначала проверять `arguments.count` и индексированные значения.
+
+## 2026-08-27 00:28 — GPT-5.6 Sol
+Форматировал UI-правку через `swift-format` → Xcode toolchain содержит formatter, но не добавляет его в shell `PATH`, поэтому команда завершилась `command not found`. В этом проекте вызывать formatter через `xcrun swift-format`.
+
+## 2026-08-27 00:29 — GPT-5.6 Sol
+Повторно проверял архитектуры перед локальной установкой → по памяти указал стандартный путь `Contents/Library/LaunchServices/LidlessHelper`, но проект кладёт daemon в `Contents/Library/HelperTools`. Брать вложенный путь из build gate или сначала сверять bundle через `rg --files`.

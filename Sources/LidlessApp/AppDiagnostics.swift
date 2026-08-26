@@ -50,7 +50,7 @@ final class AppSafetyNotifier: SafetyNotifying {
     case .helperRecoveryPending:
       code = "helper.recovery_pending"
       title = "Lidless safety recovery"
-      body = "The helper will restore normal lid sleep within its 30-second lease."
+      body = "Lidless will restore normal lid sleep automatically within 30 seconds."
       AppLog.helper.error("Helper recovery pending")
     case .samplingFailed:
       code = "battery.sample_failed"

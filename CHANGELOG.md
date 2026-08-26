@@ -20,6 +20,7 @@
 
 - Began replacing the polling-only battery cutoff with a fail-safe helper architecture tracked in issue #4.
 - Replaced the legacy single-file polling UI and privilege fallback with a signed `SMAppService` lifecycle and bounded authenticated XPC.
+- Restored the original 18×18 menu-bar sparkle and replaced user-facing “helper” jargon with plain setup and Background Items language.
 
 ### Removed
 
