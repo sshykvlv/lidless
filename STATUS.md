@@ -14,7 +14,7 @@ Tracking issue: [#4 — Make battery cutoff fail-safe and harden update/release 
 - [x] `pmset` access uses only fixed executable/arguments, a five-second timeout, strict parsing, and verified readback.
 - [x] Root helper journal persists intent atomically with `0600` file / `0700` directory permissions and retains corrupt or failed state.
 - [x] Helper state machine enforces ownership, verified restoration, recovery, external-change handling, and the 30-second liveness lease.
-- [ ] XPC accepts only the signed Lidless client and exposes fixed operations.
+- [x] XPC accepts only the signed Lidless client and exposes fixed operations.
 - [ ] App coordinator renews every 10 seconds under scoped App Nap activity and renders authoritative helper state.
 - [ ] Updater validates a read-only DMG before extraction and performs rollback-capable atomic replacement.
 - [ ] Release artifacts pass signing, notarization, stapling, Gatekeeper, checksum, and Homebrew verification.
@@ -55,3 +55,12 @@ Tracking issue: [#4 — Make battery cutoff fail-safe and harden update/release 
 - `./build.sh app` — universal app/helper link passed after the engine integration, exit 0.
 - Thread Sanitizer run of all 36 tests — 0 failures and no sanitizer reports.
 - Verified journal-before-mutation ordering, exact lease deadline, disconnect restoration, corrupt-journal fail-safe, external ownership loss, stale/unsafe renewals, readback mismatch retention, and fault recovery retry.
+
+### 2026-08-26 — Authenticated XPC boundary
+
+- `./build.sh test -only-testing:LidlessTests/ProtocolTests` — 6 secure-coding, validation, requirement, and exact-selector tests passed, exit 0.
+- `./build.sh test` — 42 total tests passed, 0 failures, exit 0.
+- `./build.sh app` — authenticated helper daemon linked into both universal slices, exit 0.
+- Helper signature resolves to identifier `lv.ykv.lidless.helper` and Team ID `J2Q78NFXZX`; app requirement pins `lv.ykv.lidless` to the same Team ID before connection activation.
+- Launch daemon plist passed `plutil`; helper symbol scan found no `system`, `popen`, or `AuthorizationExecuteWithPrivileges` entry points.
+- Standalone unsigned probe compiled with no Team ID and is kept outside every shipping target for installed-service rejection testing.

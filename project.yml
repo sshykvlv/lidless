@@ -27,12 +27,24 @@ targets:
     platform: macOS
     sources:
       - Sources/LidlessHelper
+    info:
+      path: Config/LidlessHelper-Info.plist
+      properties:
+        CFBundleIdentifier: $(PRODUCT_BUNDLE_IDENTIFIER)
+        CFBundleInfoDictionaryVersion: "6.0"
+        CFBundleName: $(PRODUCT_NAME)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
     dependencies:
       - target: LidlessCore
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: lv.ykv.lidless.helper
         PRODUCT_NAME: LidlessHelper
+        MARKETING_VERSION: 1.1.0
+        CURRENT_PROJECT_VERSION: 1.1.0
+        INFOPLIST_FILE: $(SRCROOT)/../Config/LidlessHelper-Info.plist
+        CREATE_INFOPLIST_SECTION_IN_BINARY: YES
 
   Lidless:
     type: application

@@ -62,3 +62,18 @@ Metadata gate нашёл отсутствующий `LSUIElement`, но `set -e`
 
 ## 2026-08-26 23:20 — GPT-5.6 Sol
 Компилировал POSIX atomic-journal слой на Xcode 26.6 → и квалифицированный `Darwin.open(...)`, и затем прямой неквалифицированный `open(...)` в Xcode target разрешались в недоступную variadic C-функцию, хотя standalone `swiftc` видел overlay. Надёжное разрешение — сначала присвоить `Darwin.open` явно типизированной 2- или 3-аргументной function reference и вызвать её; остальные неvariadic syscalls можно оставить квалифицированными.
+
+## 2026-08-26 23:29 — GPT-5.6 Sol
+Сверял существующие Core-типы перед реализацией XPC → дважды угадал устаревшие имена файлов (`PowerPolicy.swift`, затем `PowerSource.swift`) вместо актуального `PowerSample.swift`, из-за чего read-only команда оборвалась до остальных файлов. После `rg --files` нужно использовать только найденные пути, не подменять инвентаризацию предположением о структуре.
+
+## 2026-08-26 23:31 — GPT-5.6 Sol
+Компилировал failable `NSSecureCoding` initializer, который делегирует в throwing initializer → форма `try? self.init(...)` в Swift 6 была разобрана как использование `self` до обязательной делегации. Для такого перехода нужен явный `do { try self.init(...) } catch { return nil }`.
+
+## 2026-08-26 23:36 — GPT-5.6 Sol
+Явно типизировал allowed-class наборы для `NSXPCInterface.setClasses` как `Set<AnyHashable>`, затем попробовал contextual literals → Swift 6 не принимает Class metatypes ни через обычный `Set` initializer, ни прямо в вызове импортированного API. Рабочий bridge для Objective-C `NSSet<Class>` — собрать `NSSet(array: [AnyClass])` и явно привести к импортированному `Set<AnyHashable>`.
+
+## 2026-08-26 23:38 — GPT-5.6 Sol
+Компилировал изолированную unsigned XPC-probe fixture → Swift потребовал `private` у top-level `proxy`, потому что inferred-тип ссылается на private Objective-C protocol; кроме того, `|| true` после диагностического `codesign | rg` распространился на всю `&&`-цепочку и замаскировал exit code компилятора. Fixture-compile и необязательную metadata-диагностику нужно запускать отдельными shell-строками.
+
+## 2026-08-26 23:39 — GPT-5.6 Sol
+Проверял наличие Swift formatter config и самого formatter одной `&&`-цепочкой → ожидаемо пустой `rg` завершил команду до проверки инструмента. Независимые диагностические проверки нужно разделять строками или явно обрабатывать допустимый no-match.

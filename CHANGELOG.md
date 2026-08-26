@@ -11,6 +11,7 @@
 - Fixed-command `pmset` adapter with strict output parsing, bounded execution, zero-exit enforcement, and post-mutation readback.
 - Root-helper write-ahead journal with binary plist encoding, owner-only permissions, atomic replace, and file/directory durability syncs.
 - Serial helper ownership state machine with crash recovery, 30-second monotonic leases, disconnect handling, fail-closed renewals, and retryable fault state.
+- Versioned secure-coding XPC contract with per-connection ownership, exact operation allowlist, signed-client authentication, and bounded recovery retry.
 
 ### Changed
 
