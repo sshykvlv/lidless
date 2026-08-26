@@ -1,7 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-readonly ROOT="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+readonly ROOT
 readonly BUILD_ROOT="$ROOT/.build"
 readonly PROJECT="$BUILD_ROOT/Lidless.xcodeproj"
 readonly DERIVED_DATA="$BUILD_ROOT/DerivedData"
@@ -46,6 +47,22 @@ require_codesign_field() {
     fi
 }
 
+remove_generated_path() {
+    local path="$1"
+    case "$path" in
+        "$BUILD_ROOT"|"$ROOT/.Lidless.app.staged"|"$ROOT/$APP_NAME") ;;
+        *)
+            echo "Refusing to remove unexpected generated path: $path" >&2
+            return 1
+            ;;
+    esac
+    if [[ -d "$path" && ! -L "$path" ]]; then
+        rm -R -- "$path"
+    elif [[ -e "$path" || -L "$path" ]]; then
+        rm -- "$path"
+    fi
+}
+
 generate_project() {
     mkdir -p "$BUILD_ROOT"
     xcodegen generate --spec "$ROOT/project.yml" --project "$BUILD_ROOT"
@@ -83,7 +100,7 @@ build_app() {
     test -d "$product"
     test -x "$product/Contents/Library/HelperTools/LidlessHelper"
 
-    rm -rf "$staged"
+    remove_generated_path "$staged"
     ditto "$product" "$staged"
     lipo "$staged/Contents/MacOS/Lidless" -verify_arch arm64 x86_64
     lipo "$staged/Contents/Library/HelperTools/LidlessHelper" -verify_arch arm64 x86_64
@@ -107,13 +124,69 @@ build_app() {
         return 1
     fi
 
-    rm -rf "$ROOT/$APP_NAME"
+    remove_generated_path "$ROOT/$APP_NAME"
     mv "$staged" "$ROOT/$APP_NAME"
     echo "Built universal $configuration $ROOT/$APP_NAME"
 }
 
+build_unsigned_app() {
+    if [[ $# -lt 1 || $# -gt 2 ]]; then
+        echo "Usage: $0 unsigned-app OUTPUT [DERIVED_DATA]" >&2
+        return 64
+    fi
+
+    local output="$1"
+    local derived_data="${2:-$BUILD_ROOT/UnsignedDerivedData}"
+    if [[ "$output" != /* || "$(basename "$output")" != "$APP_NAME" ]]; then
+        echo "Unsigned output must be an absolute path ending in $APP_NAME" >&2
+        return 64
+    fi
+    if [[ "$derived_data" != /* || "$derived_data" == "/" ]]; then
+        echo "Derived data must be a specific absolute path" >&2
+        return 64
+    fi
+    if [[ -e "$output" || ! -d "$(dirname "$output")" ]]; then
+        echo "Unsigned output must not exist and its parent must exist: $output" >&2
+        return 1
+    fi
+
+    generate_project
+    xcodebuild \
+        -project "$PROJECT" \
+        -scheme Lidless \
+        -configuration Release \
+        -derivedDataPath "$derived_data" \
+        -destination "generic/platform=macOS" \
+        -quiet \
+        ARCHS="arm64 x86_64" \
+        ONLY_ACTIVE_ARCH=NO \
+        CODE_SIGNING_ALLOWED=NO \
+        CODE_SIGNING_REQUIRED=NO \
+        build
+
+    local product="$derived_data/Build/Products/Release/$APP_NAME"
+    local helper="$product/Contents/Library/HelperTools/LidlessHelper"
+    test -d "$product"
+    test -x "$helper"
+    lipo "$product/Contents/MacOS/Lidless" -verify_arch arm64 x86_64
+    lipo "$helper" -verify_arch arm64 x86_64
+    require_plist_value "$product/Contents/Info.plist" CFBundleShortVersionString 1.1.0
+    require_plist_value "$product/Contents/Info.plist" CFBundleVersion 1.1.0
+    require_plist_value "$product/Contents/Info.plist" LSUIElement true
+    plutil -lint "$product/Contents/Library/LaunchDaemons/lv.ykv.lidless.helper.plist" >/dev/null
+    if codesign --verify "$product" >/dev/null 2>&1; then
+        echo "Unsigned build unexpectedly contains a valid app signature" >&2
+        return 1
+    fi
+
+    ditto "$product" "$output"
+    echo "Built unsigned universal Release $output"
+}
+
 clean_build() {
-    rm -rf "$BUILD_ROOT" "$ROOT/.Lidless.app.staged" "$ROOT/$APP_NAME"
+    remove_generated_path "$BUILD_ROOT"
+    remove_generated_path "$ROOT/.Lidless.app.staged"
+    remove_generated_path "$ROOT/$APP_NAME"
 }
 
 command="${1:-app}"
@@ -125,9 +198,10 @@ case "$command" in
     test) run_tests "$@" ;;
     app) build_app Release ;;
     smoke-app) build_app Debug ;;
+    unsigned-app) build_unsigned_app "$@" ;;
     clean) clean_build ;;
     *)
-        echo "Usage: $0 {test|app|smoke-app|clean} [xcodebuild test arguments]" >&2
+        echo "Usage: $0 {test|app|smoke-app|unsigned-app|clean} [arguments]" >&2
         exit 64
         ;;
 esac

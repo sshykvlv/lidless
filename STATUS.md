@@ -125,3 +125,13 @@ Tracking issue: [#4 — Make battery cutoff fail-safe and harden update/release 
 - `./build.sh app` — app, updater, and background service built universal; signing/build gates passed for both slices.
 - `codesign --verify --deep --strict Lidless.app` — exit 0; source scans found no legacy Downloads app deletion or first-asset selection.
 - Release metadata is bounded and fixed-origin; the updater verifies SHA-256, signed identity, Team ID, hardened runtime, and Gatekeeper both before and after copying, detaches before restoring normal sleep, swaps only same-directory siblings with `RENAME_SWAP`, and rolls back if service restart or new-process confirmation fails.
+
+### 2026-08-27 — Fail-closed release pipeline
+
+- RED: the release contract failed against the legacy one-step script, which combined build/publication and ignored Gatekeeper failure.
+- `bash Tests/BuildContracts/test_release_fail_closed.sh` — build/publish separation, non-ignorable notarization/Gatekeeper gates, strict version rejection, and bounded deletion checks passed.
+- `shellcheck release.sh Scripts/validate-release.sh build.sh Tests/BuildContracts/test_release_fail_closed.sh` and `bash -n` — exit 0.
+- `./build.sh unsigned-app …` produced an intentionally unsigned universal app; both app/service binaries verified as `arm64 x86_64`, and signature verification correctly failed before explicit release signing.
+- Expected-negative `Scripts/validate-release.sh Lidless.app 1.1.0` rejected the local development build for lacking a Developer ID signature.
+- `./build.sh test` — 91 tests passed; `./build.sh app`, project-layout, release-contract, and isolated rollback-installer gates all exited 0.
+- Release build now signs the background service first, requires hardened runtime/timestamps, waits for an accepted Apple notarization result, staples and validates the app, then atomically emits exact DMG/ZIP/checksum artifacts without publishing. Publication requires exact `origin/main` provenance and revalidates both artifacts before creating a tag or GitHub release.
