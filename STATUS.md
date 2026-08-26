@@ -106,3 +106,12 @@ Tracking issue: [#4 — Make battery cutoff fail-safe and harden update/release 
 - Focused semantic-version and checksum-manifest tests passed after implementing bounded exact parsers.
 - `./build.sh test` — 66 tests passed, 0 failures, 0 skipped, exit 0; count verified from the generated xcresult summary.
 - Release asset URLs are derived only from a validated three-part version, while manifests accept only lowercase 64-character SHA-256 entries tied to safe exact basenames.
+
+### 2026-08-27 — Bounded download and read-only staging
+
+- RED: mounted-image and update-URL policy tests failed because the policy, session, and URL validation types did not exist.
+- Focused mounted-image, hdiutil-plist, detach-idempotency, and URL policy tests passed, including writable/ambiguous/symlink/escape/local-network rejection.
+- `./build.sh test` — 75 tests passed, 0 failures, 0 skipped, exit 0.
+- `./build.sh app` — bounded downloader, fixed hdiutil adapter, and private stager compiled into both universal slices; all signing/build gates passed.
+- `Tests/Fixtures/UpdateStagerSmoke.swift` against a generated UDZO image — `mount=read_only candidate=exact detach=ok cleanup=ok`.
+- Downloads enforce HTTPS, no credentials, public destinations, at most five redirects, 30-second timeouts, and actual 32 MiB / 64 KiB byte ceilings; staging rejects non-regular DMGs and any mounted tree over 128 MiB.

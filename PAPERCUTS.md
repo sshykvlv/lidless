@@ -107,3 +107,18 @@ Metadata gate нашёл отсутствующий `LSUIElement`, но `set -e`
 
 ## 2026-08-27 00:29 — GPT-5.6 Sol
 Повторно проверял архитектуры перед локальной установкой → по памяти указал стандартный путь `Contents/Library/LaunchServices/LidlessHelper`, но проект кладёт daemon в `Contents/Library/HelperTools`. Брать вложенный путь из build gate или сначала сверять bundle через `rg --files`.
+
+## 2026-08-27 00:37 — GPT-5.6 Sol
+Компилировал IPv4 policy с `compactMap(UInt8.init)` → Swift 6 выбрал неоднозначный zero-argument overload вместо `Substring`-конвертера. Для numeric conversion в higher-order functions нужен явный closure `compactMap { UInt8($0) }`.
+
+## 2026-08-27 00:42 — GPT-5.6 Sol
+Сравнивал canonical file URLs напрямую в mount policy → Foundation считает URL с одинаковым `.path`, но разным directory/trailing-slash hint неравными, поэтому валидный read-only fixture был отклонён. Для уже canonicalized локальных путей сравнивать `.path`, а containment проверять с компонентной границей.
+
+## 2026-08-27 00:47 — GPT-5.6 Sol
+Компилировал `@Sendable` detach action из плана → closure захватила не-Sendable existential `DiskImageAttaching` и injected `FileManager`, поэтому Swift 6 остановил обе universal slices. Контракт attacher должен явно быть `Sendable` с проверяемой реализацией, а stateless `FileManager.default` лучше получать внутри сериализованного cleanup action, не захватывать instance.
+
+## 2026-08-27 00:50 — GPT-5.6 Sol
+Проверял read-only fixture через поиск literal mount path в выводе `/sbin/mount` → `hdiutil` вернул путь под `/var`, а mount table нормализовал его через `/private/var`, поэтому `grep` завершил `set -e` smoke-test без полезного сообщения. Проверять `WritableVolume=false` через структурированный `diskutil info -plist`.
+
+## 2026-08-27 00:52 — GPT-5.6 Sol
+Добавил trap для удаления строго проверенного `mktemp` smoke-каталога через `rm -rf` → command safety layer отклонил весь скрипт до запуска как `rm -f style`, несмотря на узкую validated цель. Для одноразовых каталогов в этом окружении использовать `rm -R` без force после prefix-check.

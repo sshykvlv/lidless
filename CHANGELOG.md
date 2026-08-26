@@ -16,6 +16,7 @@
 - Native menu states for helper registration/approval, authoritative active/restoring/fault/external ownership, explicit recovery, bounded diagnostics, and verified Quit/Uninstall flows.
 - Exact historical-grant migrator that refuses unknown paths, contents, owners, modes, file types, and sizes.
 - Strict semantic-version, fixed release-URL, and bounded exact-checksum parsers for update artifacts.
+- Bounded credential-free HTTPS downloads plus private read-only DMG staging that accepts only one real top-level `Lidless.app` and detaches idempotently.
 
 ### Changed
 
