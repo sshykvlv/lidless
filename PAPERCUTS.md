@@ -23,3 +23,39 @@
 
 ## 2026-08-26 22:52 — GPT-5.6 Sol
 Готовил `.worktrees/` по workflow и опирался на `rg --files`, который без `--hidden` не показал tracked `.gitignore` → `apply_patch Add File` фактически заменил 23 существующие ignore-строки одной, и отдельный commit успел уйти в remote. Ошибка обнаружена сразу по появившимся untracked build-артефактам; восстановил содержимое из `HEAD^`, добавив только новые ignore-правила, без удаления пользовательских файлов. Перед созданием любого dotfile всегда проверять `git ls-files <path>` и `test -e`, а не `rg --files` по умолчанию.
+
+## 2026-08-26 23:03 — GPT-5.6 Sol
+Добавлял XcodeGen-каркас и полностью заменял старый `build.sh` одним патчем → `apply_patch` отверг запрос, потому что один файл нельзя одновременно пометить `Delete File` и `Add File` в пределах одного патча. Конфигурационные файлы и скрипт нужно патчить отдельными операциями либо заменять скрипт через обычный `Update File`.
+
+## 2026-08-26 23:04 — GPT-5.6 Sol
+После замены `build.sh` через отдельные Delete/Add операции запустил его напрямую → новый файл потерял executable bit и завершился `permission denied` до Xcode-сборки. После полных замен скриптов нужно сразу восстанавливать и проверять режим `+x` до запуска.
+
+## 2026-08-26 23:05 — GPT-5.6 Sol
+Запускал первый XCTest после генерации проекта с намеренно ещё не реализованным `BuildMarker` → пустой каталог `Sources/LidlessCore` не породил Swift-модуль, поэтому компилятор остановился раньше на `unable to resolve module dependency: LidlessCore`. Для test-first каркаса статической библиотеки нужен хотя бы пустой module-root файл, прежде чем можно получить предметный RED теста.
+
+## 2026-08-26 23:06 — GPT-5.6 Sol
+Повторял test-first сборку после появления Core-модуля → Swift 6 остановил весь scheme на bootstrap-приложении: глобальная константа `delegate` имела internal-доступ при private-типе `BootstrapAppDelegate`. Пометил lifetime-константу `private`, чтобы тестовый scheme мог дойти до целевого RED.
+
+## 2026-08-26 23:07 — GPT-5.6 Sol
+Запускал точечный unit-тест через схему, где приложение было помечено `all` → Xcode параллельно собирал app/helper и отменил тест из-за unrelated app build errors. Для hostless `LidlessCore`-тестов схема должна собирать app только для run/profile/archive/analyze, а test action — только `LidlessTests` и его Core-зависимость.
+
+## 2026-08-26 23:07 — GPT-5.6 Sol
+Генерировал `.build/Lidless.xcodeproj` из корневого `project.yml` → XcodeGen корректно разрешил source groups, но оставил `info.path`, entitlements и `$SRCROOT` post-build относительно каталога с `.xcodeproj`, из-за чего искался `.build/Config/Lidless-Info.plist`. Для non-source путей в проекте под `.build` требуется явный `../Config/...`.
+
+## 2026-08-26 23:08 — GPT-5.6 Sol
+Проверял universal app/helper после успешной Release-сборки → вызвал `lipo -verify_arch arm64 x86_64 <file>`, хотя эта операция требует входной файл до команды, и wrapper завершился `unknown architecture specification flag`. Использовать `lipo <file> -verify_arch arm64 x86_64` и оставлять проверку внутри build gate.
+
+## 2026-08-26 23:09 — GPT-5.6 Sol
+Проверял metadata первого universal XcodeGen bundle → `info.path` без `info.properties` заставил XcodeGen молча перезаписать исходный plist дефолтами `1.0/1`, одновременно убрав `LSUIElement` и icon keys, хотя build settings были `1.1.0`. Все обязательные Info.plist свойства нужно декларативно держать в `project.yml` и проверять уже в собранном bundle.
+
+## 2026-08-26 23:10 — GPT-5.6 Sol
+Добавлял Info.plist properties и papercut одной правкой → лишний пустой hunk-маркер перед вторым файлом сделал весь `apply_patch` невалидным. В многофайловых патчах после последней строки hunk сразу начинать следующий `Update File`, не вставляя отдельный `@@` без контекста.
+
+## 2026-08-26 23:11 — GPT-5.6 Sol
+Исправил Xcode build path на `../Config` и повторил генерацию → XcodeGen трактовал тот же путь относительно spec и создал `Lidless-Info.plist` с entitlements в соседнем `.worktrees/Config`, тогда как Xcode трактовал его относительно `.build/Lidless.xcodeproj`. Удалил ровно эти два generated-файла; generation path оставил `Config/...`, а build path задал отдельно через `INFOPLIST_FILE` и `CODE_SIGN_ENTITLEMENTS`.
+
+## 2026-08-26 23:11 — GPT-5.6 Sol
+Metadata gate нашёл отсутствующий `LSUIElement`, но `set -e` не остановил `build_app` на ложном `[[ ... ]]` внутри функции, вызванной из ветки `case`, поэтому wrapper продолжил подпись и установку локального артефакта. Критические bundle-проверки теперь используют helper с явным сообщением и `return 1`, а не полагаются на неоднозначную Bash `errexit`-семантику.
+
+## 2026-08-26 23:13 — GPT-5.6 Sol
+Включил Apple Development signing после RED-проверки отсутствующего Team ID → XcodeGen `entitlements.path` имел приоритет над явным `CODE_SIGN_ENTITLEMENTS` и снова указывал Xcode на несуществующий `.build/Config/Lidless.entitlements`. Убрал дублирующий XcodeGen entitlements-блок; tracked plist остаётся, а его build path задаётся единственным явным setting.

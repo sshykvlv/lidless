@@ -3,6 +3,7 @@ Lidless.app/
 build/
 *.zip
 .build/
+*.xcodeproj/
 
 # isolated worktrees
 .worktrees/
