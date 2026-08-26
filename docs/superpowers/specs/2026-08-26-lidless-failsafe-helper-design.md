@@ -103,8 +103,11 @@ command, shell fragment, environment, or arbitrary file path from the client.
 
 ## Trust boundary and XPC protocol
 
-For every new XPC connection, the helper obtains the peer audit token and uses
-the Security framework to validate the running code. It requires:
+For every new XPC connection, the listener sets Foundation's macOS 13+
+`NSXPCConnection.setCodeSigningRequirement(_:)` before activating the connection.
+Foundation then invalidates messages whose sender does not satisfy the fixed
+designated requirement. The helper also records the connection's read-only PID
+and effective UID for diagnostics. It requires:
 
 - a valid Apple code signature;
 - Team ID `J2Q78NFXZX`;
@@ -112,8 +115,10 @@ the Security framework to validate the running code. It requires:
 - the expected designated requirement; and
 - no invalidated or unsigned nested code.
 
-The connection is rejected before an exported object is installed if any check
-fails. Release verification includes a negative test using an unsigned client.
+The requirement is installed before the exported object and connection are
+activated, so a non-matching sender cannot deliver a protocol message. This uses
+the platform's XPC code-signing enforcement instead of parsing an audit token
+manually. Release verification includes a negative test using an unsigned client.
 
 The versioned protocol exposes only these operations:
 
@@ -124,6 +129,12 @@ The versioned protocol exposes only these operations:
 4. `disarm(sessionID, reason)` — restore the recorded pre-session value.
 5. `removeRecognizedLegacyGrant()` — delete only known legacy Lidless/KeepAwake
    sudoers files whose canonical contents match an allowlisted historical rule.
+6. `restoreNormalSleepAfterConfirmation()` — perform only the fixed verified
+   `disablesleep 0` mutation after the app has shown explicit external-ownership
+   confirmation; it accepts no value or command argument.
+7. `restartAfterVerifiedUpdateSwap()` — only while inactive, journal-free, and
+   verified at normal sleep, reply and exit nonzero so launchd reloads the helper
+   from the newly swapped app; it accepts no path, version, signal, or delay.
 
 Data-transfer objects use `NSSecureCoding`, have strict type/size validation, and
 reject unknown protocol versions. Replies use stable error codes rather than raw
@@ -151,6 +162,7 @@ timestamp may be logged but never determines safety.
 
 | Power sample | Decision |
 | --- | --- |
+| Battery cutoff set to Off | Battery data does not veto the lease; liveness recovery remains active |
 | AC power or actively charging | Safe to arm/renew |
 | Battery and percentage greater than floor | Safe to arm/renew |
 | Battery and percentage equal to or below floor | Disarm immediately |
@@ -202,6 +214,12 @@ Disarm restores the journaled original value and verifies it before deleting the
 journal. If restoration fails, the journal remains, the helper enters `faulted`,
 and launchd restarts or the running helper retries with bounded backoff while
 reporting the fault. A new arm is denied until recovery succeeds.
+
+If a journal file exists but cannot be decoded or validated, the helper fails
+safe to verified `SleepDisabled=0`, retains the corrupt file for diagnosis, and
+remains faulted instead of accepting a new arm. Lidless never arms over an
+external `SleepDisabled=1`, so an active Lidless journal cannot legitimately have
+an original value of 1.
 
 The launch daemon runs at load to process an unfinished journal before accepting
 new client work. It remains alive while a session is active, is restarted by
@@ -282,21 +300,26 @@ arbitrary system logs.
 The updater remains unprivileged and cannot call the `pmset` helper to install
 files. It follows this order:
 
-1. Download the archive and checksum into a unique private temporary directory
-   with strict response-size and timeout bounds.
-2. Verify the archive SHA-256 against the exact versioned manifest entry.
-3. Extract only inside that temporary directory; reject symlinks, path traversal,
-   unexpected top-level candidates, or a candidate outside the resolved staging
-   root.
+1. Download the release disk image and checksum into a unique private temporary
+   directory with strict response-size and timeout bounds.
+2. Verify the disk image SHA-256 against the exact versioned manifest entry.
+3. Attach the image read-only, verified, non-browsing, and non-auto-opening under
+   an empty private mount root so every volume is confined there. Require exactly
+   one mounted volume and one root `Lidless.app`, reject a
+   symlink/resolved candidate outside that mount, and always detach it. This
+   avoids extracting an untrusted archive into the writable filesystem before
+   code identity has been checked.
 4. Validate the staged app before touching the installed copy: bundle ID
    `lv.ykv.lidless`, exact expected version, Team ID `J2Q78NFXZX`, designated
    requirement, nested-code signature, hardened runtime, and Gatekeeper
    acceptance.
 5. Ask the helper to disarm and require verified restoration.
 6. Atomically replace the installed app only when its containing directory is
-   writable. If it is not writable, leave the staged/release download available
-   for an explicit manual install; do not request generic root file-copy access.
-7. Launch the new app, which reconciles helper protocol compatibility before arm.
+   writable. If it is not writable, leave the verified disk image available for
+   an explicit manual install; do not request generic root file-copy access.
+7. Restart the inactive registered helper from the swapped bundle, then launch a
+   forced new app instance and require its PID, version, bundle ID, and installed
+   bundle URL before allowing the old instance to terminate.
 
 The updater never pre-deletes `~/Downloads/Lidless.app`, never executes or opens
 an unverified candidate, and never treats missing validation output as success.
@@ -316,10 +339,12 @@ shipping requires the configured Developer ID Application identity. Release
 4. Hardened-runtime signatures for every nested executable and the outer bundle.
 5. Exact Team ID, bundle IDs, entitlements, and designated requirements.
 6. A local clean-state smoke test and forced-app-termination recovery test.
-7. Archive checksum generation and independent verification.
+7. Disk-image and direct-download ZIP checksum generation and independent
+   verification.
 8. Notarization, stapling, `codesign --verify --deep --strict`, and successful
    `spctl --assess`; no release check is followed by `|| true`.
-9. Installation of the final archive on a clean temporary path and a launch test.
+9. Installation of the final disk image and ZIP on clean temporary paths and a
+   launch test.
 10. GitHub release publication, then Homebrew cask version/SHA update and landing
     page/version verification.
 
@@ -385,4 +410,5 @@ the battery floor, remain; the first arm performs helper setup and migration.
 Implementation is complete only when every checkbox in issue #4 is demonstrably
 met, all automated and live tests above pass, the final artifact is notarized and
 Gatekeeper-accepted, the release notes match actual behavior, and the GitHub and
-Homebrew artifacts resolve to the same SHA-256-verified app.
+Homebrew paths resolve to published SHA-256-verified DMG/ZIP assets containing the
+same byte-identical signed app bundle.
