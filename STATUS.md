@@ -11,6 +11,7 @@ Tracking issue: [#4 — Make battery cutoff fail-safe and harden update/release 
 - [x] Installer validates both signatures, keeps one explicit timestamped backup, and does not mutate sudoers.
 - [x] Battery policy uses the exact `<= floor` boundary and fails closed for stale, future, unknown, or incomplete samples.
 - [ ] Power sampling responds to IOKit power-source notifications.
+- [x] `pmset` access uses only fixed executable/arguments, a five-second timeout, strict parsing, and verified readback.
 - [ ] Root helper journals intent before `pmset`, verifies readback, and enforces the 30-second liveness lease.
 - [ ] XPC accepts only the signed Lidless client and exposes fixed operations.
 - [ ] App coordinator renews every 10 seconds under scoped App Nap activity and renders authoritative helper state.
@@ -32,3 +33,10 @@ Tracking issue: [#4 — Make battery cutoff fail-safe and harden update/release 
 - `./build.sh test -only-testing:LidlessTests/SafetyPolicyTests` — 8 boundary/validation tests passed, exit 0.
 - `./build.sh test` — 9 total tests passed, 0 failures, exit 0.
 - Verified cutoff at both 10% and 9%, allowance at 11%, 15-second age boundary, and 5-second future-skew boundary.
+
+### 2026-08-26 — Verified pmset adapter
+
+- `./build.sh test -only-testing:LidlessTests/PMSetParserTests` — 7 parser/command/readback tests passed, exit 0.
+- `./build.sh test` — 16 total tests passed, 0 failures, exit 0.
+- `./build.sh app` — helper runner typechecked and linked into both universal slices, exit 0.
+- `/usr/bin/pmset -g` exposed the expected strict `SleepDisabled 0` line; no mutation command was run during verification.
