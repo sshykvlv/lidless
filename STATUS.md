@@ -13,7 +13,7 @@ Tracking issue: [#4 — Make battery cutoff fail-safe and harden update/release 
 - [ ] Power sampling responds to IOKit power-source notifications.
 - [x] `pmset` access uses only fixed executable/arguments, a five-second timeout, strict parsing, and verified readback.
 - [x] Root helper journal persists intent atomically with `0600` file / `0700` directory permissions and retains corrupt or failed state.
-- [ ] Helper state machine enforces ownership, verified restoration, recovery, and the 30-second liveness lease.
+- [x] Helper state machine enforces ownership, verified restoration, recovery, external-change handling, and the 30-second liveness lease.
 - [ ] XPC accepts only the signed Lidless client and exposes fixed operations.
 - [ ] App coordinator renews every 10 seconds under scoped App Nap activity and renders authoritative helper state.
 - [ ] Updater validates a read-only DMG before extraction and performs rollback-capable atomic replacement.
@@ -47,3 +47,11 @@ Tracking issue: [#4 — Make battery cutoff fail-safe and harden update/release 
 - `./build.sh test -only-testing:LidlessTests/HelperJournalTests` — 5 filesystem/durability tests passed, exit 0.
 - `./build.sh test` — 21 total tests passed, 0 failures, exit 0.
 - Verified binary-plist round trip, `0600`/`0700` modes, corrupt-file retention, idempotent clear with directory fsync, and preservation of the previous journal when file fsync is injected to fail.
+
+### 2026-08-26 — Fail-safe helper state machine
+
+- `./build.sh test -only-testing:LidlessTests/HelperEngineTests` — 15 ownership/recovery/lease tests passed, exit 0.
+- `./build.sh test` — 36 total tests passed, 0 failures, exit 0.
+- `./build.sh app` — universal app/helper link passed after the engine integration, exit 0.
+- Thread Sanitizer run of all 36 tests — 0 failures and no sanitizer reports.
+- Verified journal-before-mutation ordering, exact lease deadline, disconnect restoration, corrupt-journal fail-safe, external ownership loss, stale/unsafe renewals, readback mismatch retention, and fault recovery retry.
