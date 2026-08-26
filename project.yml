@@ -106,8 +106,11 @@ targets:
     sources:
       - Tests/LidlessTests
       - Sources/LidlessApp/AppReplacer.swift
+      - Sources/LidlessApp/MenuState.swift
       - Sources/LidlessApp/SHA256FileHasher.swift
       - Sources/LidlessApp/UpdateProcessRunner.swift
+      - Sources/LidlessApp/UpdateStager.swift
+      - Sources/LidlessApp/UpdatedAppLauncher.swift
     dependencies:
       - target: LidlessCore
     settings:

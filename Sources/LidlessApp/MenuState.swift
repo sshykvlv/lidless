@@ -1,5 +1,11 @@
 import LidlessCore
 
+struct ObservedHelperStatus: Equatable, Sendable {
+  let status: HelperStatus
+  let observedSleepDisabled: Bool?
+  let buildVersion: String
+}
+
 enum HelperServiceAvailability: String, Sendable {
   case notRegistered
   case enabled
@@ -20,6 +26,7 @@ enum MenuSafetyState: Equatable, Sendable {
   case off
   case armed(percent: Int?, onBattery: Bool)
   case externalKeepAwake
+  case unverified
   case helperNotRegistered
   case helperApprovalRequired
   case restoring
@@ -46,7 +53,10 @@ enum MenuStateResolver {
     }
     switch helper.status.state {
     case .inactive:
-      return helper.observedSleepDisabled == true ? .externalKeepAwake : .off
+      guard let sleepDisabled = helper.observedSleepDisabled else {
+        return .unverified
+      }
+      return sleepDisabled ? .externalKeepAwake : .off
     case .activating, .restoring:
       return .restoring
     case .active:

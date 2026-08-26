@@ -97,5 +97,124 @@ final class StaticCodeValidator: StagedAppValidating, @unchecked Sendable {
       ),
       expectedVersion: expectedVersion
     )
+
+    try validateEmbeddedService(in: standardized, expectedVersion: expectedVersion)
+  }
+
+  private func validateEmbeddedService(in app: URL, expectedVersion: SemanticVersion) throws {
+    let helper = app.appendingPathComponent(
+      EmbeddedServiceIdentityPolicy.expectedBundleProgram,
+      isDirectory: false
+    )
+    let daemon = app.appendingPathComponent(
+      "Contents/Library/LaunchDaemons/lv.ykv.lidless.helper.plist",
+      isDirectory: false
+    )
+    var helperMetadata = stat()
+    var daemonMetadata = stat()
+    let helperIsRegularExecutable =
+      lstat(helper.path, &helperMetadata) == 0
+      && helperMetadata.st_mode & S_IFMT == S_IFREG
+      && helperMetadata.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH) != 0
+      && helper.resolvingSymlinksInPath().path == helper.path
+    let daemonIsRegularFile =
+      lstat(daemon.path, &daemonMetadata) == 0
+      && daemonMetadata.st_mode & S_IFMT == S_IFREG
+      && daemon.resolvingSymlinksInPath().path == daemon.path
+
+    let daemonData = try Data(contentsOf: daemon, options: [.mappedIfSafe])
+    guard daemonData.count <= 64 * 1_024,
+      let daemonPlist = try PropertyListSerialization.propertyList(
+        from: daemonData,
+        options: [],
+        format: nil
+      ) as? [String: Any]
+    else {
+      throw StaticCodeValidationError.unsafeBundle
+    }
+    let machServices = daemonPlist["MachServices"] as? [String: Any]
+    let keepAlive = daemonPlist["KeepAlive"] as? [String: Any]
+
+    let signing = try signingEvidence(
+      at: helper,
+      requirementText: CodeSigningRequirements.helper
+    )
+    let architecturesResult = try runner.run(
+      executable: "/usr/bin/lipo",
+      arguments: ["-archs", helper.path],
+      timeout: 10
+    )
+    let architectures: Set<String> =
+      architecturesResult.status == 0
+      ? Set(
+        architecturesResult.stdout.split(whereSeparator: \Character.isWhitespace).map(String.init))
+      : []
+
+    let machServiceEnabled =
+      (machServices?[EmbeddedServiceIdentityPolicy.expectedIdentifier] as? NSNumber)?.boolValue
+      == true
+    let runAtLoad = (daemonPlist["RunAtLoad"] as? NSNumber)?.boolValue == true
+    let restartAfterFailure = (keepAlive?["SuccessfulExit"] as? NSNumber)?.boolValue == false
+    let evidence = EmbeddedServiceIdentityEvidence(
+      isRegularExecutable: helperIsRegularExecutable,
+      daemonIsRegularFile: daemonIsRegularFile,
+      bundleIdentifier: signing.identifier,
+      version: signing.version,
+      teamIdentifier: signing.teamIdentifier,
+      signatureValid: signing.signatureValid,
+      hasHardenedRuntime: signing.hasHardenedRuntime,
+      architectures: architectures,
+      daemonLabel: daemonPlist["Label"] as? String,
+      bundleProgram: daemonPlist["BundleProgram"] as? String,
+      machServiceEnabled: machServiceEnabled,
+      runAtLoad: runAtLoad,
+      restartAfterFailure: restartAfterFailure
+    )
+    try EmbeddedServiceIdentityPolicy.validate(evidence, expectedVersion: expectedVersion)
+  }
+
+  private func signingEvidence(at url: URL, requirementText: String) throws -> (
+    identifier: String?,
+    version: String?,
+    teamIdentifier: String?,
+    signatureValid: Bool,
+    hasHardenedRuntime: Bool
+  ) {
+    var staticCode: SecStaticCode?
+    var result = SecStaticCodeCreateWithPath(url as CFURL, [], &staticCode)
+    guard result == errSecSuccess, let staticCode else {
+      throw StaticCodeValidationError.securityFramework(result)
+    }
+    var requirement: SecRequirement?
+    result = SecRequirementCreateWithString(requirementText as CFString, [], &requirement)
+    guard result == errSecSuccess, let requirement else {
+      throw StaticCodeValidationError.securityFramework(result)
+    }
+    let validity = SecStaticCodeCheckValidity(
+      staticCode,
+      SecCSFlags(rawValue: kSecCSCheckAllArchitectures),
+      requirement
+    )
+    var signingInformation: CFDictionary?
+    result = SecCodeCopySigningInformation(
+      staticCode,
+      SecCSFlags(rawValue: kSecCSSigningInformation),
+      &signingInformation
+    )
+    guard result == errSecSuccess,
+      let information = signingInformation as? [CFString: Any],
+      let flags = information[kSecCodeInfoFlags] as? NSNumber
+    else {
+      throw StaticCodeValidationError.missingSigningInformation
+    }
+    let infoPlist = information[kSecCodeInfoPList] as? [String: Any]
+    let hardenedRuntimeFlag: UInt32 = 0x1_0000
+    return (
+      identifier: information[kSecCodeInfoIdentifier] as? String,
+      version: infoPlist?["CFBundleShortVersionString"] as? String,
+      teamIdentifier: information[kSecCodeInfoTeamIdentifier] as? String,
+      signatureValid: validity == errSecSuccess,
+      hasHardenedRuntime: flags.uint32Value & hardenedRuntimeFlag == hardenedRuntimeFlag
+    )
   }
 }

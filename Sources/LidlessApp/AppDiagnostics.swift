@@ -44,7 +44,7 @@ final class AppSafetyNotifier: SafetyNotifying {
       title = "Lidless restored normal sleep"
       body =
         reason == .atBatteryFloor
-        ? "The configured battery floor was reached."
+        ? "The configured battery cutoff was reached."
         : "The current power sample was not safe."
       AppLog.battery.notice("Safety cutoff reason=\(String(describing: reason), privacy: .public)")
     case .helperRecoveryPending:

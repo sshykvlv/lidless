@@ -229,7 +229,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Update
         ?? "unknown"
       let snapshot = DiagnosticSnapshot(
         appVersion: version,
-        helperVersion: version,
+        helperVersion: currentHelperStatus?.buildVersion ?? "unknown",
         service: serviceAvailability(),
         helper: currentHelperStatus,
         sample: currentSample,
@@ -375,15 +375,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Update
     toggleMenuItem.action = #selector(toggleKeepAwake)
     menu.addItem(toggleMenuItem)
 
-    let floorItem = NSMenuItem(title: "Battery floor", action: nil, keyEquivalent: "")
-    for (title, value) in [("Disabled", 0), ("5%", 5), ("10%", 10), ("15%", 15), ("20%", 20)] {
+    let floorItem = NSMenuItem(
+      title: "Sleep at battery level", action: nil, keyEquivalent: "")
+    for percentage in BatteryFloor.menuPercentages {
       let item = NSMenuItem(
-        title: title,
+        title: percentage.map { "\($0)%" } ?? "Off",
         action: #selector(setBatteryFloor(_:)),
         keyEquivalent: ""
       )
       item.target = self
-      item.tag = value
+      item.tag = percentage ?? 0
       floorMenu.addItem(item)
     }
     floorItem.submenu = floorMenu
@@ -465,6 +466,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Update
         let status = try await client.status()
         guard client === helperClient else { return }
         currentHelperStatus = status
+        if status.observedSleepDisabled == nil {
+          recorder.record("sleep.state_unverified")
+        }
         if status.status.state == .faulted {
           let faultCode = status.status.fault.map(String.init(describing:)) ?? "unknown"
           if faultCode != lastNotifiedFaultCode {
@@ -507,6 +511,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Update
     case .externalKeepAwake:
       active = false
       statusMenuItem.title = "Another tool keeps lid sleep disabled"
+    case .unverified:
+      active = false
+      statusMenuItem.title = "Could not verify lid sleep"
     case .helperNotRegistered:
       active = false
       statusMenuItem.title = "Setup required"
@@ -516,9 +523,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Update
     case .restoring:
       active = false
       statusMenuItem.title = "Restoring normal lid sleep…"
-    case .fault(let code):
+    case .fault:
       active = false
-      statusMenuItem.title = "Safety fault — \(code.rawValue)"
+      statusMenuItem.title = "Safety recovery needs attention"
     }
 
     toggleMenuItem.state = active ? .on : .off
@@ -565,7 +572,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Update
     switch state {
     case .off, .armed, .helperNotRegistered:
       return service.status != .notFound
-    case .externalKeepAwake, .helperApprovalRequired, .restoring, .fault:
+    case .externalKeepAwake, .unverified, .helperApprovalRequired, .restoring, .fault:
       return false
     }
   }
@@ -575,7 +582,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Update
       UserDefaults.standard.set(10, forKey: Self.floorDefaultsKey)
     }
     let stored = UserDefaults.standard.integer(forKey: Self.floorDefaultsKey)
-    let value: Int? = stored == 0 ? nil : stored
+    let value = BatteryFloor.normalizedMenuPercentage(stored)
+    let normalizedStored = value ?? 0
+    if stored != normalizedStored {
+      UserDefaults.standard.set(normalizedStored, forKey: Self.floorDefaultsKey)
+    }
     guard let floor = BatteryFloor(value) else {
       guard let fallback = BatteryFloor(10) else {
         preconditionFailure("The fixed 10 percent floor must be valid")
@@ -692,28 +703,64 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Update
       stopStatusRefresh()
       terminationApproved = true
       NSApp.terminate(nil)
-    case .failed(let code):
+    case .failed(let failure):
       updateInFlight = false
-      updatesMenuItem.title = "Update Failed — \(code)"
+      updatesMenuItem.title = "Update Failed"
       updatesMenuItem.isEnabled = true
-      showAlert(
-        title: "Lidless update stopped safely",
-        message:
-          "The update failed during \(code). The installed app was left unchanged or rolled back."
-      )
+      recorder.record("update.\(failure.primary)")
+      for relatedFailure in failure.relatedFailures {
+        recorder.record("update.\(relatedFailure)")
+      }
+      if failure.relatedFailures.contains(.rollback) {
+        let recoveryLocation = failure.recoveryApp?.path ?? "the hidden Lidless update copy"
+        showAlert(
+          title: "Lidless update needs recovery",
+          message:
+            "Lidless could not restore the previous version. Keep \(recoveryLocation) in place and reinstall Lidless before using closed-lid mode."
+        )
+      } else {
+        showAlert(
+          title: "Lidless update stopped safely",
+          message:
+            "Lidless stopped while \(updateFailureDescription(failure.primary)). The installed app was left unchanged or restored to the previous version."
+        )
+      }
+    }
+  }
+
+  private func updateFailureDescription(_ code: UpdateFailureCode) -> String {
+    switch code {
+    case .network:
+      return "downloading the update"
+    case .manifest, .checksum, .identity:
+      return "verifying the update"
+    case .mount, .detach:
+      return "opening the verified update"
+    case .disarm:
+      return "restoring normal lid sleep"
+    case .prepare, .swap:
+      return "installing the update"
+    case .helperRestart:
+      return "restarting background access"
+    case .launch:
+      return "opening the new version"
+    case .rollback:
+      return "restoring the previous version"
+    case .cleanup:
+      return "cleaning temporary files"
     }
   }
 
   private func installUpdateCleanupObserverIfNeeded() {
     guard let launchCleanupRequest else { return }
     updateCleanupObserver = DistributedNotificationCenter.default().addObserver(
-      forName: UpdateLaunchConfirmation.name,
+      forName: UpdateLaunchHandshake.commitName,
       object: nil,
       queue: .main
     ) { [weak self] notification in
       guard
         let receivedToken =
-          notification.userInfo?[UpdateLaunchConfirmation.tokenKey] as? String
+          notification.userInfo?[UpdateLaunchHandshake.tokenKey] as? String
       else {
         return
       }
@@ -727,6 +774,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Update
           DistributedNotificationCenter.default().removeObserver(updateCleanupObserver)
           self.updateCleanupObserver = nil
         }
+        DistributedNotificationCenter.default().postNotificationName(
+          UpdateLaunchHandshake.committedName,
+          object: nil,
+          userInfo: [UpdateLaunchHandshake.tokenKey: launchCleanupRequest.token],
+          deliverImmediately: true
+        )
         let oldApp = launchCleanupRequest.oldAppSibling
         let installedApp = Bundle.main.bundleURL
         Task { @MainActor [weak self] in
@@ -748,6 +801,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Update
           }
         }
       }
+    }
+    Task { @MainActor [weak self] in
+      await self?.announceUpdatedAppReadyIfSafe(launchCleanupRequest)
+    }
+  }
+
+  private func announceUpdatedAppReadyIfSafe(_ request: UpdateLaunchCleanupRequest) async {
+    do {
+      let version = try installedVersion()
+      let status = try await helperClient.status()
+      guard status.status.state == .inactive,
+        status.observedSleepDisabled == false,
+        status.buildVersion == version.description
+      else {
+        recorder.record("update.new_service_unverified")
+        return
+      }
+      DistributedNotificationCenter.default().postNotificationName(
+        UpdateLaunchHandshake.readyName,
+        object: nil,
+        userInfo: [UpdateLaunchHandshake.tokenKey: request.token],
+        deliverImmediately: true
+      )
+    } catch {
+      recorder.record("update.new_service_unavailable")
     }
   }
 

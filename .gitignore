@@ -5,6 +5,10 @@ build/
 .build/
 *.xcodeproj/
 
+# generated release artifacts (release notes stay versioned)
+dist/*
+!dist/RELEASE_NOTES.md
+
 # isolated worktrees
 .worktrees/
 

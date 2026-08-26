@@ -44,7 +44,7 @@ public enum MountedImagePolicy {
 
     let root = canonical(expectedMountRoot)
     let mountedVolume = canonical(mount.mountPoint)
-    guard mountedVolume.deletingLastPathComponent().path == root.path else {
+    guard mountedVolume.path == root.path else {
       throw MountedImagePolicyError.unexpectedMountPoint
     }
     guard mount.rootEntries == ["Lidless.app"] else {

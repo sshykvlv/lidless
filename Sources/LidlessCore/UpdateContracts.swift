@@ -69,7 +69,7 @@ public protocol AppReplacing: AnyObject, Sendable {
 @MainActor
 public protocol UpdateHelperControlling: AnyObject, Sendable {
   func disarmForUpdate() async throws
-  func restartAfterVerifiedUpdateSwap() async throws
+  func restartAfterVerifiedUpdateSwap(expectedVersion: SemanticVersion?) async throws
 }
 
 @MainActor
@@ -106,7 +106,7 @@ public enum UpdatePhase: Equatable, Sendable {
   case installing(SemanticVersion)
   case manualInstall(URL)
   case finished(SemanticVersion)
-  case failed(UpdateFailureCode)
+  case failed(UpdateInstallError)
 }
 
 @MainActor
@@ -117,6 +117,7 @@ public protocol UpdateReporting: AnyObject, Sendable {
 public struct UpdateInstallError: Error, Equatable, Sendable {
   public let primary: UpdateFailureCode
   public let relatedFailures: [UpdateFailureCode]
+  public let recoveryApp: URL?
 
   public var secondary: UpdateFailureCode? {
     relatedFailures.first
@@ -129,15 +130,22 @@ public struct UpdateInstallError: Error, Equatable, Sendable {
   public init(
     primary: UpdateFailureCode,
     secondary: UpdateFailureCode? = nil,
-    tertiary: UpdateFailureCode? = nil
+    tertiary: UpdateFailureCode? = nil,
+    recoveryApp: URL? = nil
   ) {
     self.primary = primary
     relatedFailures = [secondary, tertiary].compactMap { $0 }
+    self.recoveryApp = recoveryApp
   }
 
-  public init(primary: UpdateFailureCode, relatedFailures: [UpdateFailureCode]) {
+  public init(
+    primary: UpdateFailureCode,
+    relatedFailures: [UpdateFailureCode],
+    recoveryApp: URL? = nil
+  ) {
     self.primary = primary
     self.relatedFailures = relatedFailures
+    self.recoveryApp = recoveryApp
   }
 }
 
@@ -214,14 +222,7 @@ public enum UpdateURLPolicy {
       return false
     }
     let parts = host.split(separator: ".").compactMap { UInt8($0) }
-    return parts[0] == 0
-      || parts[0] == 10
-      || parts[0] == 127
-      || (parts[0] == 100 && (64...127).contains(parts[1]))
-      || (parts[0] == 169 && parts[1] == 254)
-      || (parts[0] == 172 && (16...31).contains(parts[1]))
-      || (parts[0] == 192 && parts[1] == 168)
-      || parts[0] >= 224
+    return isLocalIPv4(parts)
   }
 
   private static func isLocalIPv6(_ host: String) -> Bool {
@@ -241,10 +242,20 @@ public enum UpdateURLPolicy {
     let isMappedIPv4 =
       bytes.prefix(10).allSatisfy { $0 == 0 }
       && bytes[10] == 0xff && bytes[11] == 0xff
-    let isMappedLocal =
-      isMappedIPv4
-      && (bytes[12] == 127 || (bytes[12] == 169 && bytes[13] == 254))
+    let isMappedLocal = isMappedIPv4 && isLocalIPv4(Array(bytes[12...15]))
     return isUnspecified || isLoopback || isLinkLocal || isUniqueLocal || isMulticast
       || isMappedLocal
+  }
+
+  private static func isLocalIPv4(_ bytes: [UInt8]) -> Bool {
+    guard bytes.count == 4 else { return true }
+    return bytes[0] == 0
+      || bytes[0] == 10
+      || bytes[0] == 127
+      || (bytes[0] == 100 && (64...127).contains(bytes[1]))
+      || (bytes[0] == 169 && bytes[1] == 254)
+      || (bytes[0] == 172 && (16...31).contains(bytes[1]))
+      || (bytes[0] == 192 && bytes[1] == 168)
+      || bytes[0] >= 224
   }
 }

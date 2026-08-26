@@ -119,10 +119,16 @@ public final class HelperStatusMessage: NSObject, NSSecureCoding {
 
   public let status: HelperStatus
   public let observedSleepDisabled: Bool?
+  public let buildVersion: String
 
-  public init(status: HelperStatus, observedSleepDisabled: Bool? = nil) {
+  public init(
+    status: HelperStatus,
+    observedSleepDisabled: Bool? = nil,
+    buildVersion: String
+  ) {
     self.status = status
     self.observedSleepDisabled = observedSleepDisabled
+    self.buildVersion = buildVersion
     super.init()
   }
 
@@ -135,6 +141,13 @@ public final class HelperStatusMessage: NSObject, NSSecureCoding {
     let observedSleepDisabled =
       coder.decodeBool(forKey: CodingKey.hasObservedSleepDisabled)
       ? coder.decodeBool(forKey: CodingKey.observedSleepDisabled) : nil
+    guard
+      let buildVersion = coder.decodeObject(of: NSString.self, forKey: CodingKey.buildVersion)
+        as String?,
+      (try? SemanticVersion(buildVersion)) != nil
+    else {
+      return nil
+    }
     let hasLeaseDeadline = coder.decodeBool(forKey: CodingKey.hasLeaseDeadline)
     let leaseDeadline = hasLeaseDeadline ? coder.decodeDouble(forKey: CodingKey.leaseDeadline) : nil
     if let leaseDeadline, !leaseDeadline.isFinite {
@@ -171,6 +184,7 @@ public final class HelperStatusMessage: NSObject, NSSecureCoding {
       fault: fault
     )
     self.observedSleepDisabled = observedSleepDisabled
+    self.buildVersion = buildVersion
     super.init()
   }
 
@@ -186,6 +200,7 @@ public final class HelperStatusMessage: NSObject, NSSecureCoding {
     if let observedSleepDisabled {
       coder.encode(observedSleepDisabled, forKey: CodingKey.observedSleepDisabled)
     }
+    coder.encode(buildVersion as NSString, forKey: CodingKey.buildVersion)
     coder.encode(status.leaseDeadline != nil, forKey: CodingKey.hasLeaseDeadline)
     if let leaseDeadline = status.leaseDeadline {
       coder.encode(leaseDeadline, forKey: CodingKey.leaseDeadline)
@@ -205,6 +220,7 @@ public final class HelperStatusMessage: NSObject, NSSecureCoding {
     static let sessionID = "sessionID"
     static let hasObservedSleepDisabled = "hasObservedSleepDisabled"
     static let observedSleepDisabled = "observedSleepDisabled"
+    static let buildVersion = "buildVersion"
     static let hasLeaseDeadline = "hasLeaseDeadline"
     static let leaseDeadline = "leaseDeadline"
     static let hasLastDisarmReason = "hasLastDisarmReason"

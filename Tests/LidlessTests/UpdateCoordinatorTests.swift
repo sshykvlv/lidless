@@ -15,7 +15,7 @@ final class UpdateCoordinatorTests: XCTestCase {
       [
         .downloadManifest, .downloadDiskImage, .verifyChecksum, .mountReadOnly,
         .validateIdentity("1.1.0"), .prepareReplacement, .detach, .disarm, .commitSwap,
-        .restartHelper, .launchNewInstance, .confirmNewProcess,
+        .restartHelper("1.1.0"), .launchNewInstance, .confirmNewProcess,
       ]
     )
     let phases = fixture.reporter.phases
@@ -106,7 +106,7 @@ final class UpdateCoordinatorTests: XCTestCase {
 
     XCTAssertEqual(
       Array(fixture.events.values.suffix(4)),
-      [.launchNewInstance, .rollbackSwap, .restartHelper, .cleanupPreparedUpdate]
+      [.launchNewInstance, .rollbackSwap, .restartHelper(nil), .cleanupPreparedUpdate]
     )
   }
 
@@ -127,8 +127,24 @@ final class UpdateCoordinatorTests: XCTestCase {
 
     XCTAssertEqual(
       Array(fixture.events.values.suffix(4)),
-      [.launchNewInstance, .rollbackSwap, .restartHelper, .cleanupPreparedUpdate]
+      [.launchNewInstance, .rollbackSwap, .restartHelper(nil), .cleanupPreparedUpdate]
     )
+  }
+
+  func testRollbackFailureIsReportedWithoutClaimingRecoverySucceeded() async throws {
+    let fixture = try Fixture()
+    fixture.launcher.error = StubError.failure
+    fixture.replacer.rollbackError = StubError.failure
+
+    do {
+      try await fixture.coordinator.install(fixture.release, installedApp: fixture.installedApp)
+      XCTFail("Expected update failure")
+    } catch let error as UpdateInstallError {
+      XCTAssertEqual(error.primary, .launch)
+      XCTAssertEqual(error.relatedFailures, [.rollback])
+      XCTAssertEqual(error.recoveryApp, fixture.replacer.preparedReplacement.stagedSibling)
+      XCTAssertEqual(fixture.reporter.phases.last, .failed(error))
+    }
   }
 
   func testCancellationStillDetachesAndRemovesDownload() async throws {
@@ -154,7 +170,7 @@ private enum UpdateTestEvent: Equatable {
   case detach
   case disarm
   case commitSwap
-  case restartHelper
+  case restartHelper(String?)
   case launchNewInstance
   case confirmNewProcess
   case rollbackSwap
@@ -249,7 +265,15 @@ private final class StubReplacer: AppReplacing, @unchecked Sendable {
   let events: UpdateEventLog
   var prepared: PreparedInstall
   var prepareError: (any Error)?
+  var rollbackError: (any Error)?
   var cleanupError: (any Error)?
+
+  var preparedReplacement: PreparedReplacement {
+    guard case .replacement(let replacement) = prepared else {
+      preconditionFailure("Expected replacement fixture")
+    }
+    return replacement
+  }
 
   init(events: UpdateEventLog, prepared: PreparedInstall) {
     self.events = events
@@ -279,6 +303,7 @@ private final class StubReplacer: AppReplacing, @unchecked Sendable {
 
   func rollback(_ receipt: ReplacementReceipt) throws {
     events.append(.rollbackSwap)
+    if let rollbackError { throw rollbackError }
   }
 
   func cleanup(_ prepared: PreparedInstall) throws {
@@ -302,8 +327,8 @@ private final class StubUpdateHelper: UpdateHelperControlling, @unchecked Sendab
     if let disarmError { throw disarmError }
   }
 
-  func restartAfterVerifiedUpdateSwap() async throws {
-    events.append(.restartHelper)
+  func restartAfterVerifiedUpdateSwap(expectedVersion: SemanticVersion?) async throws {
+    events.append(.restartHelper(expectedVersion?.description))
     restartCallCount += 1
     if restartCallCount == restartErrorOnCall { throw StubError.failure }
   }

@@ -7,7 +7,7 @@ final class MountedImagePolicyTests: XCTestCase {
   private let mountRoot = URL(fileURLWithPath: "/private/tmp/lidless-mounts")
 
   func testAcceptsOneReadOnlyRootLidlessBundle() throws {
-    let mountedVolume = mountRoot.appendingPathComponent("Lidless", isDirectory: true)
+    let mountedVolume = mountRoot
     let candidate = mountedVolume.appendingPathComponent("Lidless.app", isDirectory: true)
     let mount = MountedImageDescription(
       device: "/dev/disk42s1",
@@ -28,9 +28,10 @@ final class MountedImagePolicyTests: XCTestCase {
   }
 
   func testRejectsWritableWrongMountpointExtraRootSymlinkAndEscape() throws {
-    let mountedVolume = mountRoot.appendingPathComponent("Lidless", isDirectory: true)
+    let mountedVolume = mountRoot
     let candidate = mountedVolume.appendingPathComponent("Lidless.app", isDirectory: true)
     let outside = URL(fileURLWithPath: "/private/tmp/outside", isDirectory: true)
+    let unexpectedChild = mountRoot.appendingPathComponent("Lidless", isDirectory: true)
 
     XCTAssertThrowsError(
       try validate(
@@ -42,6 +43,12 @@ final class MountedImagePolicyTests: XCTestCase {
       try validate(
         mount: makeMount(mountPoint: outside),
         candidate: outside.appendingPathComponent("Lidless.app", isDirectory: true)
+      )
+    )
+    XCTAssertThrowsError(
+      try validate(
+        mount: makeMount(mountPoint: unexpectedChild),
+        candidate: unexpectedChild.appendingPathComponent("Lidless.app", isDirectory: true)
       )
     )
     XCTAssertThrowsError(
@@ -67,7 +74,7 @@ final class MountedImagePolicyTests: XCTestCase {
   }
 
   func testRejectsWrongCandidateAndUnsafeDevice() throws {
-    let mountedVolume = mountRoot.appendingPathComponent("Lidless", isDirectory: true)
+    let mountedVolume = mountRoot
     let candidate = mountedVolume.appendingPathComponent("Other.app", isDirectory: true)
 
     XCTAssertThrowsError(

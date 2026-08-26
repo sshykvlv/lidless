@@ -69,6 +69,13 @@ final class SafetyPolicyTests: XCTestCase {
         XCTAssertNil(BatteryFloor(101))
     }
 
+    func testMenuOffersOnlyPlainSafeCutoffChoices() {
+        XCTAssertEqual(BatteryFloor.menuPercentages, [nil, 10, 20, 30])
+        XCTAssertEqual(BatteryFloor.normalizedMenuPercentage(5), 10)
+        XCTAssertEqual(BatteryFloor.normalizedMenuPercentage(15), 20)
+        XCTAssertEqual(BatteryFloor.normalizedMenuPercentage(99), 10)
+    }
+
     private func decide(_ source: PowerSource, _ percentage: Int?, floor: Int?) -> SafetyDecision {
         let sample = PowerSample(source: source, percentage: percentage, sampledAt: now)
         return SafetyPolicy.evaluate(sample: sample, floor: BatteryFloor(floor)!, now: now)

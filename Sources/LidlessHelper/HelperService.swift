@@ -15,6 +15,7 @@ final class HelperRuntime: @unchecked Sendable {
   private let engine: HelperEngine
   private let legacyGrantMigrator: LegacyGrantMigrator
   private let monotonicClock: any MonotonicClock
+  private let buildVersion: String
   private let queue = DispatchQueue(label: "lv.ykv.lidless.helper.runtime")
   private let restartHandler: @Sendable () -> Void
   private let logger = Logger(subsystem: "lv.ykv.lidless.helper", category: "runtime")
@@ -33,11 +34,13 @@ final class HelperRuntime: @unchecked Sendable {
 
   init(
     engine: HelperEngine,
+    buildVersion: String,
     legacyGrantMigrator: LegacyGrantMigrator = LegacyGrantMigrator(),
     monotonicClock: any MonotonicClock = SystemMonotonicClock(),
     restartHandler: @escaping @Sendable () -> Void = { Darwin.exit(EX_TEMPFAIL) }
   ) {
     self.engine = engine
+    self.buildVersion = buildVersion
     self.legacyGrantMigrator = legacyGrantMigrator
     self.monotonicClock = monotonicClock
     self.restartHandler = restartHandler
@@ -55,7 +58,8 @@ final class HelperRuntime: @unchecked Sendable {
       let observed = try? engine.observeSleepDisabled()
       return HelperStatusMessage(
         status: engine.status(),
-        observedSleepDisabled: observed
+        observedSleepDisabled: observed,
+        buildVersion: buildVersion
       )
     }
   }
@@ -207,7 +211,10 @@ final class HelperRuntime: @unchecked Sendable {
   }
 
   private func makeReply(code: HelperReplyCode) -> HelperReply {
-    HelperReply(code: code, status: HelperStatusMessage(status: engine.status()))
+    HelperReply(
+      code: code,
+      status: HelperStatusMessage(status: engine.status(), buildVersion: buildVersion)
+    )
   }
 
   private func replyCode(for error: Error) -> HelperReplyCode {

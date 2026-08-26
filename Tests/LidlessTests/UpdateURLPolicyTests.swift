@@ -34,6 +34,10 @@ final class UpdateURLPolicyTests: XCTestCase {
       "https://[::1]/file",
       "https://[fe80::1]/file",
       "https://[fd00::1]/file",
+      "https://[::ffff:10.0.0.1]/file",
+      "https://[::ffff:172.16.0.1]/file",
+      "https://[::ffff:192.168.1.1]/file",
+      "https://[::ffff:100.64.0.1]/file",
     ] {
       XCTAssertThrowsError(
         try UpdateURLPolicy.validate(URL(string: value)!),

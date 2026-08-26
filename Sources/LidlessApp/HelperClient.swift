@@ -1,11 +1,6 @@
 import Foundation
 import LidlessCore
 
-struct ObservedHelperStatus: Equatable, Sendable {
-  let status: HelperStatus
-  let observedSleepDisabled: Bool?
-}
-
 enum LegacyCleanupDisposition: Equatable, Sendable {
   case complete
   case manualCleanupRequired
@@ -211,7 +206,8 @@ private final class HelperStatusGate: @unchecked Sendable, XPCReplyFailing {
       .success(
         ObservedHelperStatus(
           status: message.status,
-          observedSleepDisabled: message.observedSleepDisabled
+          observedSleepDisabled: message.observedSleepDisabled,
+          buildVersion: message.buildVersion
         )))
   }
 

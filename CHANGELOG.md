@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — 1.1.0
+## 1.1.0 — 2026-08-27
 
 ### Added
 
@@ -18,13 +18,16 @@
 - Strict semantic-version, fixed release-URL, and bounded exact-checksum parsers for update artifacts.
 - Bounded credential-free HTTPS downloads plus private read-only DMG staging that accepts only one real top-level `Lidless.app` and detaches idempotently.
 - Signed update validation and rollback-capable same-directory atomic replacement, with verified-DMG manual fallback for unwritable installations.
+- One-time Background Items setup with no recurring password prompt, plus explicit removal that first verifies normal lid sleep.
+- Plain battery-cutoff choices for Off, 10%, 20%, and 30%; legacy 5%/15% prerelease preferences migrate to the next safer choice.
 
 ### Changed
 
-- Began replacing the polling-only battery cutoff with a fail-safe helper architecture tracked in issue #4.
+- Replaced the polling-only battery cutoff with a fail-safe background-service architecture tracked in issue #4.
 - Replaced the legacy single-file polling UI and privilege fallback with a signed `SMAppService` lifecycle and bounded authenticated XPC.
 - Restored the original 18×18 menu-bar sparkle and replaced user-facing “helper” jargon with plain setup and Background Items language.
 - Replaced the synchronous legacy updater with bounded async release checks, explicit progress states, checksum/signature/Gatekeeper verification, and compound failure reporting.
+- Normal lid sleep now recovers after cutoff, quit, crash, force-kill, lease expiry, service restart, and reboot recovery; external keep-awake ownership remains untouched.
 
 ### Removed
 
@@ -34,3 +37,4 @@
 ### Testing
 
 - Added a Debug-only live recovery harness for arm/disarm, exact-floor cutoff, app termination, helper restart, unsigned-client rejection, and protocol-version rejection; Release binaries exclude the control surface.
+- Added 100 deterministic unit tests plus build, installer, release, universal-architecture, signature, and Thread Sanitizer gates.

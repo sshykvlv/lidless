@@ -140,7 +140,7 @@ public final class UpdateCoordinator: Sendable {
         }
 
         do {
-          try await helper.restartAfterVerifiedUpdateSwap()
+          try await helper.restartAfterVerifiedUpdateSwap(expectedVersion: release.version)
         } catch {
           throw await rollback(
             receipt: receipt,
@@ -168,11 +168,12 @@ public final class UpdateCoordinator: Sendable {
         } catch {
           failure = UpdateInstallError(
             primary: failure.primary,
-            relatedFailures: failure.relatedFailures + [.cleanup]
+            relatedFailures: failure.relatedFailures + [.cleanup],
+            recoveryApp: failure.recoveryApp
           )
         }
       }
-      await reporter.updatePhaseChanged(.failed(failure.primary))
+      await reporter.updatePhaseChanged(.failed(failure))
       throw failure
     }
   }
@@ -209,12 +210,16 @@ public final class UpdateCoordinator: Sendable {
     do {
       try replacer.rollback(receipt)
     } catch {
-      return UpdateInstallError(primary: primary, secondary: .rollback)
+      return UpdateInstallError(
+        primary: primary,
+        secondary: .rollback,
+        recoveryApp: receipt.oldAppSibling
+      )
     }
 
     var relatedFailures: [UpdateFailureCode] = []
     do {
-      try await helper.restartAfterVerifiedUpdateSwap()
+      try await helper.restartAfterVerifiedUpdateSwap(expectedVersion: nil)
     } catch {
       relatedFailures.append(.helperRestart)
     }

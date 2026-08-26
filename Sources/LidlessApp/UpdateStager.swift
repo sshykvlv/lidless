@@ -20,31 +20,55 @@ final class HdiutilDiskImageAttacher: DiskImageAttaching, @unchecked Sendable {
 
   private let runner: any CommandRunning
   private let fileManager: FileManager
+  private let isMountedFileSystem: @Sendable (URL) -> Bool
 
-  init(runner: any CommandRunning = UpdateProcessRunner(), fileManager: FileManager = .default) {
+  init(
+    runner: any CommandRunning = UpdateProcessRunner(),
+    fileManager: FileManager = .default,
+    isMountedFileSystem: (@Sendable (URL) -> Bool)? = nil
+  ) {
     self.runner = runner
     self.fileManager = fileManager
+    self.isMountedFileSystem = isMountedFileSystem ?? Self.hasDistinctDevice(at:)
   }
 
   func attachReadOnly(image: URL, mountRoot: URL) throws -> MountedImageDescription {
+    try validatePrivateMountPoint(mountRoot)
     let result = try runner.run(
       executable: Self.executable,
       arguments: [
-        "attach", image.path, "-readonly", "-verify", "-nobrowse", "-noautoopen",
-        "-owners", "off", "-mountroot", mountRoot.path, "-plist",
+        "attach", "-readonly", "-verify", "-nobrowse", "-noautoopen",
+        "-owners", "off", "-mountpoint", mountRoot.path, "-plist", image.path,
       ],
       timeout: Self.commandTimeout
     )
     guard result.status == 0 else {
+      if isMountedFileSystem(mountRoot) {
+        do {
+          try detachMountPointWithRetry(mountRoot)
+        } catch {
+          throw UpdateStagerError.cleanupFailed
+        }
+      }
       throw UpdateStagerError.attachFailed(result.status)
     }
 
-    let mounted = try HdiutilAttachOutput.parse(result.stdout)
+    let mounted: HdiutilMountedEntity
     do {
-      let expectedParent = mountRoot.standardizedFileURL.resolvingSymlinksInPath()
+      mounted = try HdiutilAttachOutput.parse(result.stdout)
+    } catch {
+      do {
+        try detachMountPointWithRetry(mountRoot)
+      } catch {
+        throw UpdateStagerError.cleanupFailed
+      }
+      throw error
+    }
+    do {
+      let expectedMountPoint = mountRoot.standardizedFileURL.resolvingSymlinksInPath()
       guard
         mounted.mountPoint.standardizedFileURL.resolvingSymlinksInPath()
-          .deletingLastPathComponent().path == expectedParent.path
+          .path == expectedMountPoint.path
       else {
         throw MountedImagePolicyError.unexpectedMountPoint
       }
@@ -88,6 +112,50 @@ final class HdiutilDiskImageAttacher: DiskImageAttaching, @unchecked Sendable {
     }
   }
 
+  private func detachMountPointWithRetry(_ mountPoint: URL) throws {
+    do {
+      try detachMountPoint(mountPoint)
+    } catch {
+      Thread.sleep(forTimeInterval: 1)
+      try detachMountPoint(mountPoint)
+    }
+  }
+
+  private func detachMountPoint(_ mountPoint: URL) throws {
+    try validatePrivateMountPoint(mountPoint)
+    let result = try runner.run(
+      executable: Self.executable,
+      arguments: ["detach", mountPoint.path],
+      timeout: Self.commandTimeout
+    )
+    guard result.status == 0 else {
+      throw UpdateStagerError.detachFailed(result.status)
+    }
+  }
+
+  private func validatePrivateMountPoint(_ mountPoint: URL) throws {
+    let temporaryRoot = fileManager.temporaryDirectory.standardizedFileURL
+      .resolvingSymlinksInPath()
+    let point = mountPoint.standardizedFileURL.resolvingSymlinksInPath()
+    let privateRoot = point.deletingLastPathComponent()
+    var metadata = stat()
+    guard point.lastPathComponent == "mounts",
+      privateRoot.lastPathComponent.hasPrefix("lv.ykv.lidless.update-"),
+      privateRoot.deletingLastPathComponent().path == temporaryRoot.path,
+      lstat(mountPoint.path, &metadata) == 0,
+      metadata.st_mode & S_IFMT == S_IFDIR
+    else {
+      throw UpdateStagerError.temporaryRootCreationFailed
+    }
+  }
+
+  private static func hasDistinctDevice(at mountPoint: URL) -> Bool {
+    var mountMetadata = stat()
+    var parentMetadata = stat()
+    return stat(mountPoint.path, &mountMetadata) == 0
+      && stat(mountPoint.deletingLastPathComponent().path, &parentMetadata) == 0
+      && mountMetadata.st_dev != parentMetadata.st_dev
+  }
 }
 
 final class UpdateStager: UpdateStaging, @unchecked Sendable {
