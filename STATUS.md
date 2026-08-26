@@ -9,7 +9,8 @@ Tracking issue: [#4 — Make battery cutoff fail-safe and harden update/release 
 - [x] Local app and nested helper signatures resolve to Team ID `J2Q78NFXZX`.
 - [x] Built Info.plist reports version `1.1.0`, `LSUIElement=true`, macOS 13.0 minimum, and no `NSAppSleepDisabled`.
 - [x] Installer validates both signatures, keeps one explicit timestamped backup, and does not mutate sudoers.
-- [ ] Battery policy uses the exact `<= floor` boundary and responds to power-source notifications.
+- [x] Battery policy uses the exact `<= floor` boundary and fails closed for stale, future, unknown, or incomplete samples.
+- [ ] Power sampling responds to IOKit power-source notifications.
 - [ ] Root helper journals intent before `pmset`, verifies readback, and enforces the 30-second liveness lease.
 - [ ] XPC accepts only the signed Lidless client and exposes fixed operations.
 - [ ] App coordinator renews every 10 seconds under scoped App Nap activity and renders authoritative helper state.
@@ -25,3 +26,9 @@ Tracking issue: [#4 — Make battery cutoff fail-safe and harden update/release 
 - `./build.sh app` — exit 0; app and helper both `x86_64 arm64`.
 - `bash Tests/BuildContracts/test_install.sh` — exit 0 against an isolated temporary Applications directory.
 - `codesign --verify --deep --strict Lidless.app` — exit 0.
+
+### 2026-08-26 — Battery safety policy
+
+- `./build.sh test -only-testing:LidlessTests/SafetyPolicyTests` — 8 boundary/validation tests passed, exit 0.
+- `./build.sh test` — 9 total tests passed, 0 failures, exit 0.
+- Verified cutoff at both 10% and 9%, allowance at 11%, 15-second age boundary, and 5-second future-skew boundary.
