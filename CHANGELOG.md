@@ -9,6 +9,7 @@
 - Verified installer that preserves the previous app as a timestamped backup and rejects bundles outside Team ID `J2Q78NFXZX`.
 - Pure fail-safe battery policy with validated floors, exact `<=` cutoff semantics, and stale/future sample rejection.
 - Fixed-command `pmset` adapter with strict output parsing, bounded execution, zero-exit enforcement, and post-mutation readback.
+- Root-helper write-ahead journal with binary plist encoding, owner-only permissions, atomic replace, and file/directory durability syncs.
 
 ### Changed
 

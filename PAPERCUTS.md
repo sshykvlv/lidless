@@ -59,3 +59,6 @@ Metadata gate нашёл отсутствующий `LSUIElement`, но `set -e`
 
 ## 2026-08-26 23:13 — GPT-5.6 Sol
 Включил Apple Development signing после RED-проверки отсутствующего Team ID → XcodeGen `entitlements.path` имел приоритет над явным `CODE_SIGN_ENTITLEMENTS` и снова указывал Xcode на несуществующий `.build/Config/Lidless.entitlements`. Убрал дублирующий XcodeGen entitlements-блок; tracked plist остаётся, а его build path задаётся единственным явным setting.
+
+## 2026-08-26 23:20 — GPT-5.6 Sol
+Компилировал POSIX atomic-journal слой на Xcode 26.6 → и квалифицированный `Darwin.open(...)`, и затем прямой неквалифицированный `open(...)` в Xcode target разрешались в недоступную variadic C-функцию, хотя standalone `swiftc` видел overlay. Надёжное разрешение — сначала присвоить `Darwin.open` явно типизированной 2- или 3-аргументной function reference и вызвать её; остальные неvariadic syscalls можно оставить квалифицированными.
