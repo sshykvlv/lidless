@@ -10,12 +10,13 @@ Tracking issue: [#4 — Make battery cutoff fail-safe and harden update/release 
 - [x] Built Info.plist reports version `1.1.0`, `LSUIElement=true`, macOS 13.0 minimum, and no `NSAppSleepDisabled`.
 - [x] Installer validates both signatures, keeps one explicit timestamped backup, and does not mutate sudoers.
 - [x] Battery policy uses the exact `<= floor` boundary and fails closed for stale, future, unknown, or incomplete samples.
-- [ ] Power sampling responds to IOKit power-source notifications.
+- [x] Power sampling responds to IOKit power-source notifications.
 - [x] `pmset` access uses only fixed executable/arguments, a five-second timeout, strict parsing, and verified readback.
 - [x] Root helper journal persists intent atomically with `0600` file / `0700` directory permissions and retains corrupt or failed state.
 - [x] Helper state machine enforces ownership, verified restoration, recovery, external-change handling, and the 30-second liveness lease.
 - [x] XPC accepts only the signed Lidless client and exposes fixed operations.
-- [ ] App coordinator renews every 10 seconds under scoped App Nap activity and renders authoritative helper state.
+- [x] App coordinator renews every 10 seconds under scoped App Nap activity.
+- [ ] Menu renders authoritative helper state.
 - [ ] Updater validates a read-only DMG before extraction and performs rollback-capable atomic replacement.
 - [ ] Release artifacts pass signing, notarization, stapling, Gatekeeper, checksum, and Homebrew verification.
 
@@ -64,3 +65,13 @@ Tracking issue: [#4 — Make battery cutoff fail-safe and harden update/release 
 - Helper signature resolves to identifier `lv.ykv.lidless.helper` and Team ID `J2Q78NFXZX`; app requirement pins `lv.ykv.lidless` to the same Team ID before connection activation.
 - Launch daemon plist passed `plutil`; helper symbol scan found no `system`, `popen`, or `AuthorizationExecuteWithPrivileges` entry points.
 - Standalone unsigned probe compiled with no Team ID and is kept outside every shipping target for installed-service rejection testing.
+
+### 2026-08-26 — Event-driven battery safety lease
+
+- `./build.sh test -only-testing:LidlessTests/SafetyCoordinatorTests` — 9 lifecycle, cutoff, failure, and reentrancy tests passed, exit 0.
+- `./build.sh test` — 51 total tests passed, 0 failures, exit 0.
+- `./build.sh app` — IOKit sampler, signed XPC client, common-mode scheduler, and scoped process activity linked into both universal slices, exit 0.
+- Thread Sanitizer run of all 51 tests — 0 failures and no sanitizer reports.
+- Verified exact 10-second renewal interval, immediate `<= floor` disarm on notification/floor change, local teardown after every helper failure, and protection against an old arm callback stopping a replacement session.
+- Live read-only IOKit snapshot returned `Battery Power`, an `InternalBattery`, and a valid `61/100` capacity tuple on the development Mac.
+- Built app contains the fixed privileged Mach service name and still has no `NSAppSleepDisabled` key.

@@ -263,3 +263,53 @@ public final class HelperReply: NSObject, NSSecureCoding {
   func restoreNormalSleepAfterConfirmation(reply: @escaping (HelperReply) -> Void)
   func restartAfterVerifiedUpdateSwap(reply: @escaping (HelperReply) -> Void)
 }
+
+public enum HelperXPCInterfaces {
+  public static func make() -> NSXPCInterface {
+    let interface = NSXPCInterface(with: LidlessHelperXPC.self)
+    let sampleClasses = allowedClasses(PowerSampleMessage.self)
+    let replyClasses = allowedClasses(HelperReply.self, HelperStatusMessage.self)
+    let statusClasses = allowedClasses(HelperStatusMessage.self)
+
+    interface.setClasses(
+      sampleClasses,
+      for: NSSelectorFromString("arm:reply:"),
+      argumentIndex: 0,
+      ofReply: false
+    )
+    interface.setClasses(
+      sampleClasses,
+      for: NSSelectorFromString("renewWithSessionID:sample:reply:"),
+      argumentIndex: 1,
+      ofReply: false
+    )
+
+    for selector in [
+      "arm:reply:",
+      "renewWithSessionID:sample:reply:",
+      "disarmWithSessionID:reason:reply:",
+      "removeRecognizedLegacyGrantWithReply:",
+      "restoreNormalSleepAfterConfirmationWithReply:",
+      "restartAfterVerifiedUpdateSwapWithReply:",
+    ] {
+      interface.setClasses(
+        replyClasses,
+        for: NSSelectorFromString(selector),
+        argumentIndex: 0,
+        ofReply: true
+      )
+    }
+    interface.setClasses(
+      statusClasses,
+      for: NSSelectorFromString("statusWithReply:"),
+      argumentIndex: 0,
+      ofReply: true
+    )
+    return interface
+  }
+
+  private static func allowedClasses(_ classes: AnyClass...) -> Set<AnyHashable> {
+    // Foundation imports NSSet<Class> as Set<AnyHashable>; metatypes require this bridge.
+    NSSet(array: classes) as! Set<AnyHashable>
+  }
+}

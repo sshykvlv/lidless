@@ -73,6 +73,7 @@ targets:
       - target: LidlessCore
       - target: LidlessHelper
         embed: false
+      - sdk: IOKit.framework
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: lv.ykv.lidless

@@ -77,3 +77,12 @@ Metadata gate нашёл отсутствующий `LSUIElement`, но `set -e`
 
 ## 2026-08-26 23:39 — GPT-5.6 Sol
 Проверял наличие Swift formatter config и самого formatter одной `&&`-цепочкой → ожидаемо пустой `rg` завершил команду до проверки инструмента. Независимые диагностические проверки нужно разделять строками или явно обрабатывать допустимый no-match.
+
+## 2026-08-26 23:44 — GPT-5.6 Sol
+Запустил зелёные `@MainActor` coordinator tests с синхронным `XCTestCase.setUp()` → Xcode 26 выпустил actor-isolation warnings для каждой инициализации, потому что legacy sync override остаётся nonisolated даже у actor-аннотированного test class. Async-throwing `setUp()` сохраняет main-actor isolation и убирает предупреждения.
+
+## 2026-08-26 23:48 — GPT-5.6 Sol
+Собирал IOKit notification source по C-header spelling → Swift overlay помечает `kCFRunLoopCommonModes` недоступным и требует `CFRunLoopMode.commonModes`, хотя C API и документация используют старое имя. В Swift-вызовах `CFRunLoopAddSource/RemoveSource` нужен `.commonModes`.
+
+## 2026-08-26 23:49 — GPT-5.6 Sol
+Добавил cleanup в `deinit` у `@MainActor` IOKit/XPC/Timer adapters → Swift 6 рассматривает обычный destructor как nonisolated и запрещает читать non-Sendable Foundation/CoreFoundation свойства. Для main-thread cleanup на текущем toolchain нужен `isolated deinit`, а не снятие cleanup или unchecked Sendable у системных объектов.
