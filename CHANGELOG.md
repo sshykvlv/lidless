@@ -25,3 +25,7 @@
 
 - New installs no longer create or modify `/etc/sudoers.d/lidless`.
 - Removed the legacy root `main.swift` and `Info.plist`; XcodeGen sources are now canonical.
+
+### Testing
+
+- Added a Debug-only live recovery harness for arm/disarm, exact-floor cutoff, app termination, helper restart, unsigned-client rejection, and protocol-version rejection; Release binaries exclude the control surface.

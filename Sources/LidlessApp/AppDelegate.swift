@@ -41,6 +41,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private var didArmInThisRun = false
   private var lastNotifiedFaultCode: String?
   private var helperConnectionInvalidated = false
+  #if DEBUG
+    private var smokeObserver: NSObjectProtocol?
+  #endif
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     NSApp.setActivationPolicy(.accessory)
@@ -53,6 +56,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
     notifier.requestAuthorization()
     startStatusRefresh()
+    #if DEBUG
+      installSmokeObserver()
+    #endif
     Task { @MainActor [weak self] in
       await self?.refreshState()
     }
@@ -79,6 +85,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       NSApp.reply(toApplicationShouldTerminate: true)
     }
     return .terminateLater
+  }
+
+  func applicationWillTerminate(_ notification: Notification) {
+    #if DEBUG
+      if let smokeObserver {
+        DistributedNotificationCenter.default().removeObserver(smokeObserver)
+      }
+    #endif
   }
 
   func menuWillOpen(_ menu: NSMenu) {
@@ -556,4 +570,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     alert.addButton(withTitle: "OK")
     alert.runModal()
   }
+
+  #if DEBUG
+    private func installSmokeObserver() {
+      smokeObserver = DistributedNotificationCenter.default().addObserver(
+        forName: Notification.Name("lv.ykv.lidless.debug.smoke"),
+        object: nil,
+        queue: .main
+      ) { [weak self] notification in
+        let command = notification.userInfo?["command"] as? String
+        let percentage = notification.userInfo?["percentage"] as? Int
+        Task { @MainActor [weak self] in
+          await self?.handleSmokeCommand(command, percentage: percentage)
+        }
+      }
+    }
+
+    private func handleSmokeCommand(_ command: String?, percentage: Int?) async {
+      switch command {
+      case "arm":
+        if let smokeFloor = BatteryFloor(10) {
+          try? await coordinator.arm(floor: smokeFloor)
+        }
+      case "disarm":
+        await coordinator.disarm(reason: .user)
+      case "battery":
+        battery.setSmokeBatteryPercentage(percentage)
+        await coordinator.powerDidChange()
+      case "clear-battery":
+        battery.setSmokeBatteryPercentage(nil)
+      case "quit":
+        NSApp.terminate(nil)
+      case "invalid-version":
+        do {
+          _ = try PowerSampleMessage(
+            validatingVersion: 2,
+            sourceRaw: PowerSource.battery.rawValue,
+            percentage: 80,
+            sampledAt: Date(),
+            floor: 10
+          )
+          recorder.record("debug.invalid_version_accepted")
+        } catch {
+          recorder.record("debug.invalid_version_rejected")
+        }
+      default:
+        recorder.record("debug.unknown_smoke_command")
+      }
+      await refreshState()
+    }
+  #endif
 }

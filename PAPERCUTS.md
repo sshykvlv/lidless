@@ -98,3 +98,6 @@ Metadata gate нашёл отсутствующий `LSUIElement`, но `set -e`
 
 ## 2026-08-27 00:17 — GPT-5.6 Sol
 Проверял exit code bounded CLI через zsh-переменную `status` → zsh резервирует её как read-only special parameter, и успешные предшествующие static checks закончились ошибкой harness. Для exit code нужны task-specific имена вроде `lidless_exit`.
+
+## 2026-08-27 00:28 — GPT-5.6 Sol
+Форматировал standalone Swift smoke-control fixture с `switch` cases в виде array destructuring (`case ["battery", let value]`) → Swift не поддерживает pattern matching содержимого Array и formatter завершился до build. Для bounded CLI сначала проверять `arguments.count` и индексированные значения.

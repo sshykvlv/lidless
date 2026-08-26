@@ -85,3 +85,10 @@ Tracking issue: [#4 — Make battery cutoff fail-safe and harden update/release 
 - Project-layout and rollback installer contracts passed against the completed signed bundle; invalid CLI arguments exit with `EX_USAGE` without starting UI.
 - Verified external keep-awake state is observed but never claimed, helper approval has an explicit System Settings action, XPC calls are bounded to five seconds, and custom Quit tears down scoped activity before termination.
 - Legacy cleanup inspects only `/etc/sudoers.d/lidless` and `/etc/sudoers.d/keepawake`, rejects symlinks/edited/writable/non-root/oversized files, and leaves every unknown case for manual review.
+
+### 2026-08-27 — Live recovery harness prepared
+
+- `./build.sh smoke-app` — universal signed Debug bundle built with private distributed smoke control, exit 0.
+- `./build.sh app` plus release-string scan — universal Release bundle built and contains no Debug smoke notification name, exit 0.
+- `Scripts/smoke-helper.sh` passed shell syntax validation; its bounded controller fixture compiled for macOS 13 and accepts only fixed smoke operations.
+- Live matrix is pending the one visible macOS Background Item approval; baseline remains `SleepDisabled 0`.

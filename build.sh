@@ -65,11 +65,12 @@ run_tests() {
 }
 
 build_app() {
+    local configuration="${1:-Release}"
     generate_project
     xcodebuild \
         -project "$PROJECT" \
         -scheme Lidless \
-        -configuration Release \
+        -configuration "$configuration" \
         -derivedDataPath "$DERIVED_DATA" \
         -destination "generic/platform=macOS" \
         -quiet \
@@ -77,7 +78,7 @@ build_app() {
         ONLY_ACTIVE_ARCH=NO \
         build
 
-    local product="$DERIVED_DATA/Build/Products/Release/$APP_NAME"
+    local product="$DERIVED_DATA/Build/Products/$configuration/$APP_NAME"
     local staged="$ROOT/.Lidless.app.staged"
     test -d "$product"
     test -x "$product/Contents/Library/HelperTools/LidlessHelper"
@@ -108,7 +109,7 @@ build_app() {
 
     rm -rf "$ROOT/$APP_NAME"
     mv "$staged" "$ROOT/$APP_NAME"
-    echo "Built universal $ROOT/$APP_NAME"
+    echo "Built universal $configuration $ROOT/$APP_NAME"
 }
 
 clean_build() {
@@ -122,10 +123,11 @@ fi
 
 case "$command" in
     test) run_tests "$@" ;;
-    app) build_app ;;
+    app) build_app Release ;;
+    smoke-app) build_app Debug ;;
     clean) clean_build ;;
     *)
-        echo "Usage: $0 {test|app|clean} [xcodebuild test arguments]" >&2
+        echo "Usage: $0 {test|app|smoke-app|clean} [xcodebuild test arguments]" >&2
         exit 64
         ;;
 esac

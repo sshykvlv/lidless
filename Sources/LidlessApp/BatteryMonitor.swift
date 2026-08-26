@@ -6,8 +6,20 @@ import LidlessCore
 final class IOKitBatteryMonitor: PowerSampling, BatteryMonitoring {
   private var notificationSource: CFRunLoopSource?
   private var callbackBox: Unmanaged<BatteryNotificationBox>?
+  #if DEBUG
+    private var smokeSample: PowerSample?
+  #endif
 
   func sample() throws -> PowerSample {
+    #if DEBUG
+      if let smokeSample {
+        return PowerSample(
+          source: smokeSample.source,
+          percentage: smokeSample.percentage,
+          sampledAt: Date()
+        )
+      }
+    #endif
     let sampledAt = Date()
     guard let snapshot = IOPSCopyPowerSourcesInfo()?.takeRetainedValue() else {
       return PowerSample(source: .unknown, percentage: nil, sampledAt: sampledAt)
@@ -73,6 +85,14 @@ final class IOKitBatteryMonitor: PowerSampling, BatteryMonitoring {
     }
     callbackBox?.release()
   }
+
+  #if DEBUG
+    func setSmokeBatteryPercentage(_ percentage: Int?) {
+      smokeSample = percentage.map {
+        PowerSample(source: .battery, percentage: $0, sampledAt: Date())
+      }
+    }
+  #endif
 
   private func internalBatteryDescription(snapshot: CFTypeRef) -> [String: Any]? {
     guard
