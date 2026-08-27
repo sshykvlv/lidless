@@ -158,3 +158,6 @@ Metadata gate нашёл отсутствующий `LSUIElement`, но `set -e`
 
 ## 2026-08-27 02:01 — GPT-5.6 Sol
 Создавал тестовый Downloads-каталог через короткий `FileManager.createDirectory(at:)` → в доступном Foundation overlay нет такого convenience overload, и compile-fail скрыл ожидаемый RED assertion. Всегда передавать `withIntermediateDirectories` явно.
+
+## 2026-08-27 02:08 — GPT-5.6 Sol
+Запускал обязательный `gsd-ship` для оформления PR → `SKILL.md` ссылается на `~/.Codex/get-shit-done/workflows/ship.md`, которого нет. Ship-пакету нужен самодостаточный workflow-файл или актуальный путь; до исправления остаётся ручной эквивалент с теми же gate-проверками.
