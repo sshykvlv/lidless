@@ -14,7 +14,7 @@ A macOS menu-bar app that keeps your Mac awake with the lid shut — **no extern
 ![Notarized](https://img.shields.io/badge/notarized-by%20Apple-2ea44f)
 ![Price](https://img.shields.io/badge/price-free-FFD60A)
 
-<sub>Notarized · Universal (Apple Silicon + Intel) · macOS 13+ · ~1–2 MB · No daemon, no telemetry</sub>
+<sub>Notarized · Universal (Apple Silicon + Intel) · macOS 13+ · Fail-safe recovery · No telemetry</sub>
 
 <br />
 
@@ -42,7 +42,8 @@ When you get where you're going, you flip the lid back up and there it is: the d
 
 The toggle is the easy part. The reason you'll actually *trust* it is the safety net watching your back the moment you're not looking:
 
-- **🔋 Battery floor** — running on battery? Lidless flips back to normal sleep before the charge gets dangerous, so a forgotten laptop in a bag never drains to a hard zero.
+- **🔋 Battery cutoff** — choose **10%, 20%, 30%, or Off**. On battery, Lidless restores normal lid sleep the instant the charge reaches the selected number or drops below it. The default is 10%.
+- **🛟 Automatic recovery** — if Lidless quits, crashes, is force-killed, or stops responding, normal lid sleep returns within 30 seconds.
 
 You don't have to babysit it. That's the entire point.
 
@@ -79,34 +80,31 @@ Two easy habits and you're golden:
 - **Give it a touch now and then.** If it's working hard in a backpack, check it isn't getting genuinely hot. Warm is fine; hot-and-trapped is worth opening the bag for.
 - **Fanless MacBook Airs warm up faster.** No fan means heat has nowhere to shed, so don't seal one shut and forget about it for hours under load.
 
-The **Battery floor** has your back on power — it cuts to normal sleep before your battery bottoms out. It doesn't manage *heat*, though. That part's on you, and it's an easy part. The menu even keeps you honest while it's on: *"On — keep an eye on battery & heat."*
+The **Sleep at battery level** setting has your back on power — it cuts to normal sleep before your battery bottoms out. It doesn't manage *heat*, though. That part's on you, and it's an easy part.
 
 ---
 
 ## How it works *(no magic, no hand-waving)*
 
-macOS has exactly one switch that overrides "lid closed → go to sleep": `pmset disablesleep`. Lidless flips that switch on when you want to stay awake, flips it off when you don't, and reads the current state back from `pmset -g` so the star always tells the truth.
+macOS has exactly one switch that overrides "lid closed → go to sleep": `pmset disablesleep`. Lidless changes that switch through a small signed background service registered with Apple's `SMAppService` API. macOS shows Lidless under Background Items, and you approve it once through System Settings when required. There is no recurring password prompt.
 
-That's the entire mechanism. No fake keystrokes, no background daemon pretending you moved the mouse. One real system setting, toggled honestly. It's essentially one Swift file driving a native `NSMenu` — you could read the whole thing over a coffee.
+The background service exposes only fixed Lidless operations over authenticated XPC. It accepts the signed Lidless app from Team ID `J2Q78NFXZX`; it does not accept a command, path, shell, or arbitrary `pmset` value. Before disabling sleep it writes a small owner-only recovery record, verifies the system readback, and gives the app a 30-second lease. The app renews every 10 seconds and also reacts immediately to IOKit battery notifications.
 
-Changing that setting needs admin rights, so you get two honest paths:
+If the app quits, crashes, is force-killed, stops renewing, the service restarts, or the Mac reboots with an unfinished Lidless session, recovery restores normal lid sleep. A cutoff of 10% means **10% or below**, not one polling cycle later. Unknown or stale battery data also fails safe. If the keep-awake setting was already enabled before Lidless starts, Lidless labels it as external and leaves it untouched unless you explicitly confirm **Restore Normal Lid Sleep…**. macOS exposes this as one global switch, so a second tool enabling the same switch after Lidless starts cannot be detected independently.
 
-1. **Zero setup.** The first time you toggle, macOS shows its standard admin-password dialog. Authenticate and you're done. Nothing is installed behind your back.
-2. **One-time passwordless grant.** Prefer never to see the dialog again? Building with `install.sh` adds a narrow `sudoers` rule scoped to *exactly* the two `pmset -a disablesleep` on/off commands the app issues — and nothing else — so toggling is silent from then on.
-
-No background helper hangs around. No invisible privileged daemon. What you see is what runs.
+Updates are checked only against Lidless's fixed GitHub release location. Before installation, Lidless verifies the SHA-256 checksum, Developer ID signature, Team ID, version, hardened runtime, nested background service, and Apple Gatekeeper approval. It mounts the disk image read-only, confirms the new app and service in both directions, and uses a durable transaction record to recover even if the Mac loses power during replacement.
 
 ---
 
 ## Install
 
-### Download (recommended — the no-grant path)
+### Download (recommended)
 
 1. Grab the latest [**GitHub Release**](https://github.com/sshykvlv/lidless/releases/latest).
-2. Unzip and drag **Lidless.app** into `/Applications`.
-3. Double-click it.
+2. Open `Lidless.dmg` and drag **Lidless.app** into `/Applications` (the ZIP contains the same app).
+3. Double-click Lidless, open its menu-bar icon, and choose **Finish Setup…**.
 
-It just *opens*. Lidless is **notarized by Apple** under a Developer ID, so there's no "unidentified developer" wall, no right-click-then-Open dance, no Gatekeeper detour. It ships as a **universal binary** — native on Apple Silicon and Intel — and needs **macOS 13 (Ventura) or newer**. The first time you toggle it on, macOS asks for your admin password once; approve it and you're set.
+Lidless is **notarized by Apple** under a Developer ID, so there's no "unidentified developer" wall or Gatekeeper detour. It ships as a **universal binary** — native on Apple Silicon and Intel — and needs **macOS 13 (Ventura) or newer**. If macOS asks for approval, Lidless changes the action to **Allow Lidless in System Settings…**. This is a visible one-time Background Items approval.
 
 ### Homebrew
 
@@ -114,9 +112,9 @@ It just *opens*. Lidless is **notarized by Apple** under a Developer ID, so ther
 brew install --cask sshykvlv/tap/lidless
 ```
 
-Same notarized build, managed by Homebrew. To remove it later: `brew uninstall --cask lidless` (add `--zap` to also clear preferences and any `pmset` grant).
+Same notarized build, managed by Homebrew. Before removing the app, choose **Remove Background Access…** so normal sleep is verified and Lidless is removed from Background Items. The cask invokes the same bounded cleanup automatically.
 
-### Build from source *(adds the passwordless grant)*
+### Build from source
 
 ```sh
 git clone https://github.com/sshykvlv/lidless.git
@@ -124,15 +122,17 @@ cd lidless
 ./install.sh
 ```
 
-`install.sh` builds the app, drops it in `/Applications`, **and** writes the one-line passwordless `pmset` grant — so toggling never prompts again. It asks for your admin password once (via the system dialog) to install that `sudoers` rule. Requires the Xcode command-line tools. When it's done, look for the star in your menu bar. *(Want no grant at all? Use the Release download above instead.)*
+`install.sh` builds a universal signed app, validates both the app and its signed background service, keeps one timestamped backup for rollback, and installs it in `/Applications`. It never creates or edits an admin grant. Source builds require Xcode with Swift 6, the Xcode command-line tools, and [XcodeGen](https://github.com/yonaskolb/XcodeGen). When Lidless opens, choose **Finish Setup…** and complete any visible macOS approval.
 
 ---
 
 ## Why so small, why so quiet
 
-Because a thing that keeps your Mac awake shouldn't need a Dock icon, a settings window with twelve tabs, a phone-home analytics pipeline, or a launch daemon you'll find two years from now and not remember installing.
+Because a thing that keeps your Mac awake shouldn't need a Dock icon, a settings window with twelve tabs, or a phone-home analytics pipeline.
 
-No daemon. No kext. No telemetry — it doesn't phone home because there's nothing to phone home about. It does one job, makes its one privileged action explicit, weighs almost nothing, and ships every line of its source under MIT. That's the whole design philosophy, and it fits in a sentence.
+No kext and no telemetry. The one privileged component is a visible, signed, uninstallable background service with a narrow protocol and an expiring lease. Choose **Copy diagnostics** to copy a bounded snapshot of versions, enum states, battery percentage/cutoff, the observed sleep boolean, and five recent Lidless error codes — never a recovery record, username, raw command output, or arbitrary path.
+
+To remove it, choose **Remove Background Access…** first. Lidless verifies normal sleep, unregisters its fixed service, and removes an old `lidless`/`keepawake` permission only when its owner, mode, path, size, and contents exactly match a historical rule. Anything edited or unfamiliar is left for manual review.
 
 ---
 

@@ -2,6 +2,15 @@
 Lidless.app/
 build/
 *.zip
+.build/
+*.xcodeproj/
+
+# generated release artifacts (release notes stay versioned)
+dist/*
+!dist/RELEASE_NOTES.md
+
+# isolated worktrees
+.worktrees/
 
 # generated iconset (AppIcon.icns + AppIcon-1024.png are committed)
 icon/AppIcon.iconset/
@@ -11,6 +20,9 @@ icon/AppIcon.iconset/
 
 # any built app bundle
 *.app/
+
+# temporary implementation notes
+implementation-notes.md
 
 # secrets / credentials — never commit (defensive; project uses none today)
 .env

@@ -1,0 +1,134 @@
+name: Lidless
+
+options:
+  deploymentTarget:
+    macOS: "13.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    DEVELOPMENT_TEAM: J2Q78NFXZX
+    CODE_SIGN_STYLE: Automatic
+    MACOSX_DEPLOYMENT_TARGET: "13.0"
+
+targets:
+  LidlessCore:
+    type: library.static
+    platform: macOS
+    sources:
+      - Sources/LidlessCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: lv.ykv.lidless.core
+        PRODUCT_NAME: LidlessCore
+
+  LidlessHelper:
+    type: tool
+    platform: macOS
+    sources:
+      - Sources/LidlessHelper
+    info:
+      path: Config/LidlessHelper-Info.plist
+      properties:
+        CFBundleIdentifier: $(PRODUCT_BUNDLE_IDENTIFIER)
+        CFBundleInfoDictionaryVersion: "6.0"
+        CFBundleName: $(PRODUCT_NAME)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+    dependencies:
+      - target: LidlessCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: lv.ykv.lidless.helper
+        PRODUCT_NAME: LidlessHelper
+        MARKETING_VERSION: 1.1.0
+        CURRENT_PROJECT_VERSION: 1.1.0
+        INFOPLIST_FILE: $(SRCROOT)/../Config/LidlessHelper-Info.plist
+        CREATE_INFOPLIST_SECTION_IN_BINARY: YES
+
+  Lidless:
+    type: application
+    platform: macOS
+    sources:
+      - Sources/LidlessApp
+      - path: icon/AppIcon.icns
+        buildPhase: resources
+    info:
+      path: Config/Lidless-Info.plist
+      properties:
+        CFBundleDisplayName: Lidless
+        CFBundleExecutable: $(EXECUTABLE_NAME)
+        CFBundleIconFile: AppIcon
+        CFBundleIconName: AppIcon
+        CFBundleIdentifier: $(PRODUCT_BUNDLE_IDENTIFIER)
+        CFBundleInfoDictionaryVersion: "6.0"
+        CFBundleName: $(PRODUCT_NAME)
+        CFBundlePackageType: APPL
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
+        LSUIElement: true
+        NSPrincipalClass: NSApplication
+    dependencies:
+      - target: LidlessCore
+      - target: LidlessHelper
+        embed: false
+      - sdk: IOKit.framework
+      - sdk: ServiceManagement.framework
+      - sdk: UserNotifications.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: lv.ykv.lidless
+        PRODUCT_NAME: Lidless
+        MARKETING_VERSION: 1.1.0
+        CURRENT_PROJECT_VERSION: 1.1.0
+        INFOPLIST_FILE: $(SRCROOT)/../Config/Lidless-Info.plist
+        CODE_SIGN_ENTITLEMENTS: $(SRCROOT)/../Config/Lidless.entitlements
+    postBuildScripts:
+      - name: Embed helper and launch daemon property list
+        inputFiles:
+          - $(BUILT_PRODUCTS_DIR)/LidlessHelper
+          - $(SRCROOT)/../Config/lv.ykv.lidless.helper.plist
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(WRAPPER_NAME)/Contents/Library/HelperTools/LidlessHelper
+          - $(TARGET_BUILD_DIR)/$(WRAPPER_NAME)/Contents/Library/LaunchDaemons/lv.ykv.lidless.helper.plist
+        script: |
+          set -euo pipefail
+          helper_dir="$TARGET_BUILD_DIR/$WRAPPER_NAME/Contents/Library/HelperTools"
+          daemon_dir="$TARGET_BUILD_DIR/$WRAPPER_NAME/Contents/Library/LaunchDaemons"
+          mkdir -p "$helper_dir" "$daemon_dir"
+          ditto "$BUILT_PRODUCTS_DIR/LidlessHelper" "$helper_dir/LidlessHelper"
+          ditto "$SRCROOT/../Config/lv.ykv.lidless.helper.plist" "$daemon_dir/lv.ykv.lidless.helper.plist"
+
+  LidlessTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests/LidlessTests
+      - Sources/LidlessApp/AppReplacer.swift
+      - Sources/LidlessApp/MenuState.swift
+      - Sources/LidlessApp/SHA256FileHasher.swift
+      - Sources/LidlessApp/UpdateProcessRunner.swift
+      - Sources/LidlessApp/UpdateStager.swift
+      - Sources/LidlessApp/UpdateTransactionJournal.swift
+      - Sources/LidlessApp/UpdatedAppLauncher.swift
+    dependencies:
+      - target: LidlessCore
+    settings:
+      base:
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+
+schemes:
+  Lidless:
+    build:
+      targets:
+        Lidless:
+          - run
+          - profile
+          - archive
+          - analyze
+        LidlessTests:
+          - test
+    test:
+      targets:
+        - LidlessTests
