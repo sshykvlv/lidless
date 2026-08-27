@@ -50,6 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Update
   private var pendingRelease: ReleaseDescriptor?
   private var updateInFlight = false
   private var updateCleanupObserver: NSObjectProtocol?
+  private var updateHandshakeWatchdog: Task<Void, Never>?
   #if DEBUG
     private var smokeObserver: NSObjectProtocol?
   #endif
@@ -106,6 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Update
     if let updateCleanupObserver {
       DistributedNotificationCenter.default().removeObserver(updateCleanupObserver)
     }
+    updateHandshakeWatchdog?.cancel()
     #if DEBUG
       if let smokeObserver {
         DistributedNotificationCenter.default().removeObserver(smokeObserver)
@@ -774,36 +776,71 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Update
           DistributedNotificationCenter.default().removeObserver(updateCleanupObserver)
           self.updateCleanupObserver = nil
         }
-        DistributedNotificationCenter.default().postNotificationName(
-          UpdateLaunchHandshake.committedName,
-          object: nil,
-          userInfo: [UpdateLaunchHandshake.tokenKey: launchCleanupRequest.token],
-          deliverImmediately: true
-        )
+        updateHandshakeWatchdog?.cancel()
+        self.updateHandshakeWatchdog = nil
         let oldApp = launchCleanupRequest.oldAppSibling
         let installedApp = Bundle.main.bundleURL
         Task { @MainActor [weak self] in
-          let cleanupResult = await Task.detached { () -> Result<Void, any Error> in
+          let commitResult = await Task.detached { () -> Result<Void, any Error> in
             do {
               let validator = StaticCodeValidator()
               let replacer = AtomicAppReplacer(
                 validator: validator,
                 hasher: SHA256FileHasher()
               )
-              try replacer.removeOldAppSibling(oldApp, installedApp: installedApp)
+              try replacer.markUpdateCommitted(
+                installedApp: installedApp,
+                oldAppSibling: oldApp
+              )
               return .success(())
             } catch {
               return .failure(error)
             }
           }.value
-          if case .failure = cleanupResult {
-            self?.recorder.record("update.old_cleanup_failed")
+          guard case .success = commitResult else {
+            self?.recorder.record("update.commit_journal_failed")
+            return
+          }
+          DistributedNotificationCenter.default().postNotificationName(
+            UpdateLaunchHandshake.committedName,
+            object: nil,
+            userInfo: [UpdateLaunchHandshake.tokenKey: launchCleanupRequest.token],
+            deliverImmediately: true
+          )
+          Task { @MainActor [weak self] in
+            let cleanupResult = await Task.detached { () -> Result<Void, any Error> in
+              do {
+                let validator = StaticCodeValidator()
+                let replacer = AtomicAppReplacer(
+                  validator: validator,
+                  hasher: SHA256FileHasher()
+                )
+                try replacer.removeOldAppSibling(oldApp, installedApp: installedApp)
+                return .success(())
+              } catch {
+                return .failure(error)
+              }
+            }.value
+            if case .failure = cleanupResult {
+              self?.recorder.record("update.old_cleanup_failed")
+            }
           }
         }
       }
     }
     Task { @MainActor [weak self] in
       await self?.announceUpdatedAppReadyIfSafe(launchCleanupRequest)
+    }
+    updateHandshakeWatchdog = Task { @MainActor [weak self] in
+      do {
+        try await Task.sleep(for: .seconds(20))
+      } catch {
+        return
+      }
+      guard let self, updateCleanupObserver != nil else { return }
+      recorder.record("update.commit_signal_timed_out")
+      terminationApproved = true
+      NSApp.terminate(nil)
     }
   }
 

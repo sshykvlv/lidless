@@ -152,3 +152,9 @@ Metadata gate нашёл отсутствующий `LSUIElement`, но `set -e`
 
 ## 2026-08-27 01:50 — GPT-5.6 Sol
 Проверял компиляцию приложения через ожидаемую команду `./build.sh build` → скрипт не имеет общего build-action и завершился только usage-подсказкой. Для обычной Debug-сборки здесь нужен `./build.sh smoke-app`, а список действий стоит сделать заметнее в README или `./build.sh --help`.
+
+## 2026-08-27 01:54 — GPT-5.6 Sol
+Добавлял RED-тест для нового source-файла одновременно с записью пути в `project.yml` → XcodeGen отклонил spec раньше компиляции, потому что файл ещё не существовал. Для compile-fail TDD с XcodeGen сначала нужен пустой source placeholder, затем тест на отсутствующие символы.
+
+## 2026-08-27 02:01 — GPT-5.6 Sol
+Создавал тестовый Downloads-каталог через короткий `FileManager.createDirectory(at:)` → в доступном Foundation overlay нет такого convenience overload, и compile-fail скрыл ожидаемый RED assertion. Всегда передавать `withIntermediateDirectories` явно.

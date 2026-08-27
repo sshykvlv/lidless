@@ -10,6 +10,7 @@ readonly TAG_PREFIX="v"
 
 TEMP_ROOT=""
 ACTIVE_MOUNT=""
+DRAFT_TAG=""
 
 fail() {
   echo "Release stopped: $*" >&2
@@ -22,6 +23,15 @@ cleanup() {
   if [[ -n "$ACTIVE_MOUNT" ]]; then
     hdiutil detach "$ACTIVE_MOUNT" >/dev/null 2>&1 || true
     ACTIVE_MOUNT=""
+  fi
+  if [[ -n "$DRAFT_TAG" ]]; then
+    local draft_state
+    draft_state="$(gh release view "$DRAFT_TAG" --json isDraft --jq .isDraft 2>/dev/null || true)"
+    if [[ "$draft_state" == "true" ]]; then
+      gh release delete "$DRAFT_TAG" --yes --cleanup-tag >/dev/null 2>&1 \
+        || echo "Could not remove incomplete draft release: $DRAFT_TAG" >&2
+    fi
+    DRAFT_TAG=""
   fi
   if [[ -n "$TEMP_ROOT" && -d "$TEMP_ROOT" && ! -L "$TEMP_ROOT" ]]; then
     case "$(basename "$TEMP_ROOT")" in
@@ -40,7 +50,7 @@ Usage:
   ./release.sh publish 1.1.0
 
 build creates, signs, notarizes, staples, and validates local artifacts only.
-publish verifies those artifacts again, then creates the tag and GitHub release.
+publish verifies the artifacts in a private draft, then makes the release public.
 USAGE
 }
 
@@ -244,10 +254,10 @@ publish_release() {
   TEMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/lidless-publish.XXXXXX")"
   validate_artifact_apps "$ROOT/dist" "$version" "$TEMP_ROOT/prepublish-validation"
 
-  git -C "$ROOT" tag -a "$tag" -m "Lidless $version"
-  git -C "$ROOT" push origin "$tag"
   cd "$ROOT"
+  DRAFT_TAG="$tag"
   gh release create "$tag" dist/Lidless.dmg dist/Lidless.zip dist/SHA256SUMS \
+    --draft --target "$(git -C "$ROOT" rev-parse HEAD)" \
     --title "Lidless $version" --notes-file dist/RELEASE_NOTES.md
 
   local downloaded="$TEMP_ROOT/published"
@@ -256,6 +266,8 @@ publish_release() {
     --pattern Lidless.dmg --pattern Lidless.zip --pattern SHA256SUMS
   cmp "$ROOT/dist/SHA256SUMS" "$downloaded/SHA256SUMS"
   verify_manifest "$downloaded"
+  gh release edit "$tag" --draft=false
+  DRAFT_TAG=""
   echo "GitHub publication verified: $tag"
 }
 

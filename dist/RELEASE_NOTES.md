@@ -7,8 +7,8 @@ This release also adds:
 - Clear **Off / 10% / 20% / 30%** battery-cutoff choices.
 - The original, easy-to-see menu-bar sparkle.
 - Plain setup language without internal service terminology.
-- Detection of keep-awake settings owned by another tool, without silently changing them.
-- Signed, checksum-verified, read-only updates with automatic rollback if the new app cannot launch.
+- Detection of a keep-awake setting that was already enabled before Lidless, without silently changing it.
+- Signed, checksum-verified, read-only updates with automatic rollback after a failed launch or interrupted replacement.
 - Universal support for Apple Silicon and Intel on macOS 13 or newer.
 
 After installing, open the Lidless menu and choose **Finish Setup…**. If macOS asks, choose **Allow Lidless in System Settings…** and approve Lidless once under Background Items. There is no recurring password prompt.

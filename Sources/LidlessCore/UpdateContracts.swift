@@ -32,11 +32,21 @@ public enum PreparedInstall: Equatable, Sendable {
 public struct PreparedReplacement: Equatable, Sendable {
   public let installedApp: URL
   public let stagedSibling: URL
+  public let stagedInode: UInt64
+  public let previousVersion: SemanticVersion
   public let version: SemanticVersion
 
-  public init(installedApp: URL, stagedSibling: URL, version: SemanticVersion) {
+  public init(
+    installedApp: URL,
+    stagedSibling: URL,
+    stagedInode: UInt64,
+    previousVersion: SemanticVersion,
+    version: SemanticVersion
+  ) {
     self.installedApp = installedApp
     self.stagedSibling = stagedSibling
+    self.stagedInode = stagedInode
+    self.previousVersion = previousVersion
     self.version = version
   }
 }
@@ -44,12 +54,25 @@ public struct PreparedReplacement: Equatable, Sendable {
 public struct ReplacementReceipt: Equatable, Sendable {
   public let installedApp: URL
   public let oldAppSibling: URL
+  public let previousVersion: SemanticVersion
   public let version: SemanticVersion
+  public let transactionID: UUID
+  public let targetInode: UInt64
 
-  public init(installedApp: URL, oldAppSibling: URL, version: SemanticVersion) {
+  public init(
+    installedApp: URL,
+    oldAppSibling: URL,
+    previousVersion: SemanticVersion,
+    version: SemanticVersion,
+    transactionID: UUID,
+    targetInode: UInt64
+  ) {
     self.installedApp = installedApp
     self.oldAppSibling = oldAppSibling
+    self.previousVersion = previousVersion
     self.version = version
+    self.transactionID = transactionID
+    self.targetInode = targetInode
   }
 }
 

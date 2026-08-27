@@ -10,6 +10,8 @@ grep -Fq 'build)' release.sh
 grep -Fq 'publish)' release.sh
 grep -Eq 'notarytool[[:space:]]+submit.*--wait' release.sh
 grep -Fq 'gh release create' release.sh
+grep -Fq -- '--draft' release.sh
+grep -Fq "gh release edit \"\$tag\" --draft=false" release.sh
 grep -Fq 'stapler validate' Scripts/validate-release.sh
 grep -Fq 'spctl --assess --type execute' Scripts/validate-release.sh
 
@@ -23,6 +25,12 @@ if rg -n 'gh release create' release.sh | grep -F 'build_release'; then
   echo "The build command must not publish" >&2
   exit 1
 fi
+
+create_line="$(rg -n "gh release create \\\"\\\$tag\\\"" release.sh | cut -d: -f1)"
+download_line="$(rg -n "gh release download \\\"\\\$tag\\\"" release.sh | cut -d: -f1)"
+publish_line="$(rg -n "gh release edit \\\"\\\$tag\\\" --draft=false" release.sh | cut -d: -f1)"
+test "$create_line" -lt "$download_line"
+test "$download_line" -lt "$publish_line"
 
 if rg -n 'rm[[:space:]]+-rf[[:space:]]+"?\$?(HOME|ROOT|repo_root)' \
   release.sh Scripts/validate-release.sh; then

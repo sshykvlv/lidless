@@ -297,7 +297,10 @@ private final class StubReplacer: AppReplacing, @unchecked Sendable {
     return ReplacementReceipt(
       installedApp: replacement.installedApp,
       oldAppSibling: replacement.stagedSibling,
-      version: replacement.version
+      previousVersion: replacement.previousVersion,
+      version: replacement.version,
+      transactionID: UUID(),
+      targetInode: replacement.stagedInode
     )
   }
 
@@ -396,6 +399,8 @@ private struct Fixture {
     let replacement = PreparedReplacement(
       installedApp: installedApp,
       stagedSibling: URL(fileURLWithPath: "/Applications/.Lidless.update-1.app"),
+      stagedInode: 1,
+      previousVersion: try SemanticVersion("1.0.0"),
       version: version
     )
     downloader = StubDownloader(

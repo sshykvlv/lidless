@@ -17,7 +17,9 @@ Tracking issue: [#4 — Make battery cutoff fail-safe and harden update/release 
 - [x] XPC accepts only the signed Lidless client and exposes fixed operations.
 - [x] App coordinator renews every 10 seconds under scoped App Nap activity.
 - [x] Menu renders authoritative helper state, registration/approval state, and external ownership.
-- [x] Updater validates a read-only DMG before extraction and performs rollback-capable atomic replacement.
+- [x] Updater validates the outer app, nested service, read-only DMG, exact versions, and fresh post-swap service before installation is accepted.
+- [x] Update replacement uses a durable owner-only transaction journal, two-way launch acknowledgement, deterministic startup recovery, and honest rollback-failure reporting.
+- [x] Release publication validates assets in a private GitHub draft and makes it public only after downloaded checksums pass.
 - [ ] Release artifacts pass signing, notarization, stapling, Gatekeeper, checksum, and Homebrew verification.
 
 ## Evidence
@@ -135,3 +137,17 @@ Tracking issue: [#4 — Make battery cutoff fail-safe and harden update/release 
 - Expected-negative `Scripts/validate-release.sh Lidless.app 1.1.0` rejected the local development build for lacking a Developer ID signature.
 - `./build.sh test` — 91 tests passed; `./build.sh app`, project-layout, release-contract, and isolated rollback-installer gates all exited 0.
 - Release build now signs the background service first, requires hardened runtime/timestamps, waits for an accepted Apple notarization result, staples and validates the app, then atomically emits exact DMG/ZIP/checksum artifacts without publishing. Publication requires exact `origin/main` provenance and revalidates both artifacts before creating a tag or GitHub release.
+
+### 2026-08-27 — Deep-review update recovery
+
+- RED/GREEN coverage added for the three-signal new-app handshake, unreadable sleep state, compound rollback failure, partial `hdiutil` attachment, IPv4-mapped private destinations, partial app copies, manual-DMG cleanup, and durable update transactions.
+- `./build.sh test` — 106 tests passed, 0 failures, 0 skipped, exit 0; count verified from the generated xcresult summary.
+- `./build.sh test -enableThreadSanitizer YES` — all 106 tests passed with no sanitizer reports, exit 0.
+- `./build.sh smoke-app` — universal Debug app and background service built as `arm64 x86_64`, with all local signature/build gates passing.
+- `bash Tests/BuildContracts/test_release_fail_closed.sh`, `bash -n`, and ShellCheck — private-draft publication order and cleanup contract passed.
+- The staged app validator now checks the nested executable signature, exact Team/bundle/version, hardened runtime, universal architectures, fixed launch-daemon fields, and Mach service. Restart verification uses a fresh XPC connection and requires the expected service version.
+- The updater fsyncs a bounded `0600` transaction record before `RENAME_SWAP`, advances it through swapped/committed phases, terminates an unconfirmed new process before rollback, and recovers interrupted states on the next normal launch.
+- Partially copied hidden bundles are removed only by the exact inode created for that transaction; unsuccessful manual-install cleanup removes only the exact generated DMG.
+- A failed rollback is surfaced as an explicit recovery alert with the preserved old-app path rather than claiming that restoration succeeded.
+- Publication now uploads to a private GitHub draft, redownloads and verifies exact checksums, and publishes only as the final external action; an incomplete draft is removed by the release cleanup trap.
+- Documentation now states the platform limit accurately: Lidless protects a keep-awake setting that predates its session, but macOS's single global boolean cannot reveal a second tool writing the same value later.

@@ -110,6 +110,7 @@ targets:
       - Sources/LidlessApp/SHA256FileHasher.swift
       - Sources/LidlessApp/UpdateProcessRunner.swift
       - Sources/LidlessApp/UpdateStager.swift
+      - Sources/LidlessApp/UpdateTransactionJournal.swift
       - Sources/LidlessApp/UpdatedAppLauncher.swift
     dependencies:
       - target: LidlessCore

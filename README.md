@@ -90,9 +90,9 @@ macOS has exactly one switch that overrides "lid closed → go to sleep": `pmset
 
 The background service exposes only fixed Lidless operations over authenticated XPC. It accepts the signed Lidless app from Team ID `J2Q78NFXZX`; it does not accept a command, path, shell, or arbitrary `pmset` value. Before disabling sleep it writes a small owner-only recovery record, verifies the system readback, and gives the app a 30-second lease. The app renews every 10 seconds and also reacts immediately to IOKit battery notifications.
 
-If the app quits, crashes, is force-killed, stops renewing, the service restarts, or the Mac reboots with an unfinished Lidless session, recovery restores normal lid sleep. A cutoff of 10% means **10% or below**, not one polling cycle later. Unknown or stale battery data also fails safe. If another tool already owns the keep-awake setting, Lidless labels it as external and leaves it untouched unless you explicitly confirm **Restore Normal Lid Sleep…**.
+If the app quits, crashes, is force-killed, stops renewing, the service restarts, or the Mac reboots with an unfinished Lidless session, recovery restores normal lid sleep. A cutoff of 10% means **10% or below**, not one polling cycle later. Unknown or stale battery data also fails safe. If the keep-awake setting was already enabled before Lidless starts, Lidless labels it as external and leaves it untouched unless you explicitly confirm **Restore Normal Lid Sleep…**. macOS exposes this as one global switch, so a second tool enabling the same switch after Lidless starts cannot be detected independently.
 
-Updates are checked only against Lidless's fixed GitHub release location. Before installation, Lidless verifies the SHA-256 checksum, Developer ID signature, Team ID, version, hardened runtime, and Apple Gatekeeper approval. It mounts the disk image read-only and can atomically roll back if the new app does not launch correctly.
+Updates are checked only against Lidless's fixed GitHub release location. Before installation, Lidless verifies the SHA-256 checksum, Developer ID signature, Team ID, version, hardened runtime, nested background service, and Apple Gatekeeper approval. It mounts the disk image read-only, confirms the new app and service in both directions, and uses a durable transaction record to recover even if the Mac loses power during replacement.
 
 ---
 
