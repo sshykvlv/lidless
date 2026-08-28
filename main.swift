@@ -14,6 +14,7 @@ let expectedAssetName = "Lidless.zip"
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
+    private let statusMenu = NSMenu()
 
     private let toggleItem  = NSMenuItem(title: "Keep Awake with Lid Closed", action: #selector(toggleKeepAwake), keyEquivalent: "")
     private let warningItem = NSMenuItem(title: "On — keep an eye on battery & heat", action: nil, keyEquivalent: "")
@@ -40,7 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
-        let menu = NSMenu()
+        let menu = statusMenu
         menu.delegate = self
         toggleItem.target = self
         menu.addItem(toggleItem)
@@ -68,7 +69,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(updatesItem)
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit Lidless", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
-        statusItem.menu = menu
+
+        // Меню НЕ назначаем через statusItem.menu — иначе macOS перехватывает клик
+        // до нас и Option+click отличить нельзя. Вместо этого сами решаем на action:
+        // с зажатым Option — мгновенный toggle без открытия меню, иначе — обычное меню.
+        statusItem.button?.target = self
+        statusItem.button?.action = #selector(statusItemClicked(_:))
+        statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
 
         batteryTimer = Timer.scheduledTimer(timeInterval: 60, target: self,
                                             selector: #selector(checkBatteryFloor), userInfo: nil, repeats: true)
@@ -146,6 +153,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func toggleKeepAwake() { setKeepAwake(!isKeepAwakeOn()) }
+
+    // Option+click по иконке — мгновенный toggle, без открытия меню.
+    // Обычный клик (любая кнопка) — показываем меню как раньше.
+    @objc private func statusItemClicked(_ sender: Any) {
+        if NSEvent.modifierFlags.contains(.option) {
+            toggleKeepAwake()
+            return
+        }
+        statusItem.menu = statusMenu
+        statusItem.button?.performClick(nil)
+        statusItem.menu = nil
+    }
 
     @objc private func selectFloor(_ sender: NSMenuItem) {
         batteryFloor = floorOptions[sender.tag].1
