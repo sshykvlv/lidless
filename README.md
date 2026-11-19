@@ -103,9 +103,11 @@ No background helper hangs around. No invisible privileged daemon. What you see 
 
 ---
 
-## Install
+## Install (archived version, no further updates)
 
-### Download (recommended — the no-grant path)
+> Looking for the maintained app? [Lidwork on the Mac App Store →](https://lidwork.com/lidless/?utm_source=lidless&utm_campaign=github-install)
+
+### Download (the no-grant path)
 
 1. Grab the latest [**GitHub Release**](https://github.com/sshykvlv/lidless/releases/latest).
 2. Unzip and drag **Lidless.app** into `/Applications`.
