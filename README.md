@@ -1,3 +1,8 @@
+> **Lidless is now [Lidwork](https://lidwork.com/lidless/?utm_source=lidless&utm_campaign=github)** on the Mac App Store.
+> Your copy of Lidless keeps working, and this code stays here under the MIT licence, archived. It just won't get new
+> versions. Lidwork lets the Mac sleep again by itself if it quits or crashes, stops at your battery level or when the
+> Mac gets too hot, and has a timer. [What changed, and how to remove Lidless cleanly →](https://lidwork.com/lidless/?utm_source=lidless&utm_campaign=github)
+
 <div align="center">
 
 <img src="icon/logo.png" alt="Lidless" width="148" />
